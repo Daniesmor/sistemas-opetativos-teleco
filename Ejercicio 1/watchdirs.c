@@ -3,41 +3,63 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
+#include <stdlib.h>
 
 
-void imprimirFecha() {
-    var fecha = new date(1);
-
+void
+list_directory() {
+    execl("/bin/ls", "ls" "-1", NULL); 
 }
+
+void
+print_date() {
+    pid_t date_pid = fork();
+
+    if (date_pid == -1) {
+        perror("fork");
+        exit(1);
+    } 
+    if (date_pid == 0) {
+        execl("/bin/date","date", NULL); 
+        exit(1);
+    }
+}
+
+void 
+create_process(int i, char *argv[]) {
+    pid_t child_pid = fork();
+    printf("%d", i);
+
+    if (child_pid == -1) {
+        perror("fork"); // Manejar error de creación de proceso hijo
+        exit(1);
+    }
+
+    if (child_pid == 0) {
+        chdir(argv[i]);
+        list_directory();
+        exit(1); 
+    } 
+}
+
+void list_directories(int argc, char *argv[]) {
+    for (int i = 1; i < argc; i++) {
+        create_process(i, argv);
+    }
+}
+
 
 int
 main (int argc, char *argv[])
 {
     pid_t father_pid = getpid();
-    pid_t child_pid;
+    printf("Watchdirs started (PID: %d)\n", father_pid);
+    
     while (true) {
+        print_date();
+
+        list_directories(argc, argv);
         
-        imprimirFecha();
-        printf("Watchdirs started (PID: %d)\n", father_pid);
-        int execl(const char *path, const char *arg);
-        sleep(3);
+        sleep(1);
     }
-    for (int i = 1; i < argc; i++) {
-        child_pid = fork();
-
-        if (child_pid == -1) {
-            perror("fork"); // Manejar error de creación de proceso hijo
-            return 1;
-        }
-
-        if (child_pid == 0) {
-            // Código del proceso hijo
-            printf("Soy el proceso hijo (PID: %d)\n", getpid());
-        } else {
-            // Código del proceso padre
-            printf("Soy el proceso padre (PID: %d)\n", getpid());
-        }
-
-    }
-
 }

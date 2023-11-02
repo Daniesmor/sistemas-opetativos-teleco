@@ -34,7 +34,7 @@ print_date()
 	if (date_pid == 0) {
         //printf("SOY EL HIJO %d \n", date_pid);
 		execl("/bin/date", "date", NULL);
-		exit(42);
+		exit(1);
 	}
     else {
         //printf("HA EMPEZAADO EL PADRE, EL PID DEL DATE ES %d \n", date_pid);
@@ -44,10 +44,10 @@ print_date()
 
         if (child_pid_date > 0) {
             if (WIFEXITED(status)) {
-                printf("Ya se ha impreso la fecha con PID %d terminado con estado: %d\n", child_pid_date, WEXITSTATUS(status)); //YA SE HA IMPRESO LA FECHA
+                //printf("Ya se ha impreso la fecha con PID %d terminado con estado: %d\n", child_pid_date, WEXITSTATUS(status)); //YA SE HA IMPRESO LA FECHA
 
             } else {
-                printf("El proceso hijo con PID %d terminó de manera anormal.\n", child_pid_date);
+                //printf("El proceso hijo con PID %d terminó de manera anormal.\n", child_pid_date);
             }
         } 
 
@@ -71,7 +71,6 @@ list_process(int argc, char *argv[])
     int empty_folders = 0;
 
     for (int i = 1; i < argc; i++) {
-        printf("Estamos en el directorio %d \n", i);
         pid_t child_pid = fork();
 
         if (child_pid == -1) {
@@ -82,17 +81,12 @@ list_process(int argc, char *argv[])
 
             if (chdir(argv[i]) != 0) {
                 argv[i] = NULL;
-                empty_folders = empty_folders +1;
-                //printf("Valor de emptyfolders %d", empty_folders);
-                if (empty_folders == argc) {
-                    printf("EStmamos jodias");
-                }
-                //printf("valor completo argv %s \n", argv[i]);
-                //unkown_path(i); NO HACE FALTA TENERLO EN CUENTA 
+                exit(1);
             } else {
                 list_directory();
+                exit(0);
             }
-            exit(1);
+            
 	    }
         else {
             int status;
@@ -100,6 +94,11 @@ list_process(int argc, char *argv[])
 
             if (child_pid_process > 0) {
                 if (WIFEXITED(status)) {
+                    empty_folders = empty_folders + WEXITSTATUS(status);
+                    if (empty_folders == argc - 1) {
+                        printf("No dirs \n");
+                        exit(1);
+                    }
                     //printf("Ya se ha ejecutado list_process con PID %d terminado con estado: %d\n", child_pid_process, WEXITSTATUS(status)); 
                 } else {
                     //printf("El proceso hijo con PID %d terminó de manera anormal.\n", child_pid_process);
@@ -135,9 +134,9 @@ list_directories(int argc, char *argv[])
 
             if (child_pid_directories > 0) {
                 if (WIFEXITED(status)) {
-                    //printf("Ya se ha ejecutado LS con PID %d terminado con estado: %d\n", child_pid_directories, WEXITSTATUS(status)); 
+                    
                 } else {
-                    //printf("El proceso hijo con PID %d terminó de manera anormal.\n", child_pid_directories);
+
                 }
             } 
         }
@@ -161,9 +160,8 @@ main(int argc, char *argv[])
 	while (true) {
 		print_date();
 
-        printf("------------------- YA ESTAMOS EN EL MAIN DESPUES DE DATE ----------------  \n");
         list_directories(argc, argv);
-		printf("-------------------SE HA TERMINADO LA VUELTA ---------------- \n");
+
 		sleep(1);
 
 	}

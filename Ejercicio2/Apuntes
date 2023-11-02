@@ -1,0 +1,17 @@
+
+------------------------------ APUNTES SOBRE WAIT ----------------------------------
+
+La función wait en general devuelve un valor menor o igual a 0 en los siguientes casos:
+
+    Si wait se llama con un argumento que es un puntero a una variable de estado (status) que no es válido (por ejemplo, un puntero nulo o un puntero inválido). En este caso, wait devuelve -1 y establece errno para indicar el error.
+
+    Si se produce un error en la llamada a wait. Los errores pueden incluir la falta de permisos para esperar a un proceso hijo o la interrupción de la llamada por una señal.
+
+    Si no hay procesos hijos que esperar (es decir, no hay procesos hijos en ejecución ni en estado "zombi" pendientes de ser recogidos). En este caso, wait devuelve 0.
+
+En el código que proporcionaste, es poco probable que se cumplan los dos primeros casos, ya que la llamada a wait se realiza en un contexto que se espera que tenga procesos hijos en ejecución o en estado "zombi". Por lo tanto, el manejo de errores con perror después de la llamada a wait es innecesario y se puede eliminar, ya que en la mayoría de los casos, wait devolverá el PID del proceso hijo que ha terminado.
+
+
+
+
+Cuando el proceso padre llama a la función wait, se bloquea hasta que el proceso hijo termine su ejecución. La función wait espera a que uno de los procesos hijos termine y recopila información sobre su estado de salida. Esto significa que el proceso padre se bloquea hasta que haya un proceso hijo que haya terminado.

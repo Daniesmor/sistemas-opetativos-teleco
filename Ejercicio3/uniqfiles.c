@@ -7,7 +7,7 @@
 #include <sys/wait.h>
 
 void
-list_process(int argc, char *argv[])
+compare_files(int argc, char *argv[])
 {
 
 	int noreps = 1;
@@ -26,13 +26,11 @@ list_process(int argc, char *argv[])
 			if (cmp_pid == 0) {
 				execl("/bin/cmp", "cmp", "-s", argv[i], argv[j],
 				      NULL);
-				//printf("usage: uniqfiles [files ...] ");
 				exit(2);
 			} else {
 				int status;
 
 				wait(&status);
-
 				if (argv[i] != argv[j]) {
 					if (WEXITSTATUS(status) == 0) {
 						repetidos = repetidos + 1;
@@ -62,23 +60,22 @@ list_process(int argc, char *argv[])
 }
 
 void
-list_directories(int argc, char *argv[])
+compare(int argc, char *argv[])
 {
 	if (argc <= 2) {
 
 		exit(0);
 
 	} else {
-		list_process(argc, argv);
+		compare_files(argc, argv);
 	}
 }
 
 int
 main(int argc, char *argv[])
 {
-	int files = argc;
 
-	list_directories(files, argv);
+	compare(argc, argv);
 
 	return 0;
 }

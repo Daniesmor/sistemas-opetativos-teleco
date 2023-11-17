@@ -63,6 +63,10 @@ open_files(char *file, int mode)
 		args_err();
 	}
 
+    if (file_descriptor == -1) {
+		printf("lolazo");
+	}
+
 	return file_descriptor;
 }
 
@@ -111,7 +115,7 @@ void
 read_write_files(int size_bytes, char *file, int rfile_descriptor)
 {
 	int bytes_readed = 1;	//LE DEFINIMOS COMO1 PARA QUE PUEDA ENTRAR AL WHILE
-	char read_buffer[256];
+	char read_buffer[1000];
 	int wfile_name_counter = 0;
 
 	while (bytes_readed != 0) {
@@ -126,6 +130,7 @@ read_write_files(int size_bytes, char *file, int rfile_descriptor)
 			wfile_name_counter++;
 
 		}
+
 
 	}
 }
@@ -148,6 +153,7 @@ split_files(int size_bytes, char *file)
 void
 split_data(int argc, char *argv[])
 {
+
 	if (argc < 3) {
 		args_err();
 	} else {

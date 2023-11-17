@@ -1,0 +1,5 @@
+//SUPONER QUE HAY MENOS DE 1000 FICHERS
+// USAR READ Y WRITE
+//ABRIR USAR EL ARCHIVO Y CERRAR
+//hay que cambiar d edirectorio??
+// indagar mas sobre descriptores de ficheros, salida estandar de errores???

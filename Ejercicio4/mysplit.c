@@ -11,17 +11,24 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+enum {
+	rfile_permissions = 0666,
+    wfile_permissions = 0664,
+};
+
+void
+args_err()
+{
+    printf("usage: mysplit N file \n");
+    exit(1);
+}
+
 int 
 leer_archivo(int size_bytes,char *file, int file_descriptor, char *buffer)
 {
-    //int max_bytes_to_read = 1000;
-    
 
     int bytes_readed = read(file_descriptor, buffer, size_bytes);
-
-    printf("Se han leido %d bytes \n", bytes_readed);
     
-
     if (bytes_readed == -1) {
         perror("HA HABIO UN ERROR EN LA LECTURA \n");
         exit(1);
@@ -43,88 +50,116 @@ set_name(int wfile_counter, char *buffer_wfile, int wfile_name_buffer_size, char
     }
 }
 
-void
-split_proccess(int size_bytes,char *file)
+int 
+open_files(char *file, int mode)
 {
-    printf("size: %d, file: %s\n", size_bytes, file);
-    char buffer[100000];
-    int lectura_completa = 1;
-    int rfile_permissions = 0666;
+    int file_descriptor;
 
-
-    int wfile_counter = 0;
-    char wfile_name_buffer[10000];
-    int wfile_permissions = 0664;
-
-	// ABRIMOS EL FICHERO PARA LECTRA fd=file descriptor descritpor de ficharo
-    int file_descriptor = open(file, rfile_permissions);
+    if (mode == 1) {
+        file_descriptor = open(file, rfile_permissions); //PERMISOS DE SOLO LECTUA
+    }  
+    else { 
+        file_descriptor = open(file, O_CREAT | O_WRONLY | O_TRUNC, wfile_permissions); //PERMISOS DE LECTURA Y ESCRITURA
+    }
 
     if (file_descriptor == -1) {
-        perror("Error al abrir el archivo");
+        args_err();
+    }
+
+    return file_descriptor;
+}
+
+void 
+close_files(int file_descriptor)
+{
+    int close_id = close(file_descriptor);
+    if (close_id == -1) {
+        perror("Close failed");
         exit(1);
     }
- 
-    
-    // leemos archivo con read
-    while (lectura_completa != 0)
+}
+
+void
+write_files(int wfile_descriptor,  char *read_buffer, int bytes_readed)
+{
+    int bytes_writed = write(wfile_descriptor, read_buffer, bytes_readed);
+    if (bytes_writed == -1) {
+        perror("Write failed \n");
+        exit(1);
+    }
+}
+
+void
+create_smalls(char *file, char *read_buffer, int bytes_readed, int *wfile_name_counter) 
+{
+
+    char wfile_name_buffer[10000];
+
+    set_name(*wfile_name_counter, wfile_name_buffer, sizeof(wfile_name_buffer), file);
+    int wfile_descriptor = open_files(wfile_name_buffer, 0);
+
+    // ESCRIBIMOS CONTENIDO DE CADA FICHERO PEQUEÑO
+            
+    write_files(wfile_descriptor, read_buffer, bytes_readed);
+            
+
+    // CERRAMOS FICHERO PEQUEÑO
+    close_files(wfile_descriptor);
+}
+
+void
+read_write_files(int size_bytes,char *file, int rfile_descriptor)
+{
+    int bytes_readed = 1; //LE DEFINIMOS COMO1 PARA QUE PUEDA ENTRAR AL WHILE
+    char read_buffer[100000];
+    int wfile_name_counter = 0;
+
+
+    while (bytes_readed != 0)
     {
 
-        
-        lectura_completa = leer_archivo(size_bytes, file, file_descriptor, buffer);
-        if (lectura_completa <= size_bytes) {
-            //char wfile_name = sprintf(wfile_name, "%d",wfile_counter);
+        // LEEMOS EL FICHERO
+        bytes_readed = read(rfile_descriptor, read_buffer, size_bytes);
+        if (bytes_readed <= size_bytes) {
 
-            // CREAMOS EL FICHERO PARA ESCRITURA
-            set_name(wfile_counter, wfile_name_buffer, sizeof(wfile_name_buffer), file);
-            printf("EL nombre es %zu \n", sizeof(wfile_name_buffer));
-            int wfile_descriptor = open(wfile_name_buffer, O_CREAT | O_WRONLY | O_TRUNC, wfile_permissions);
-            
-            printf("Se ha creado el siguiente fd %d \n", wfile_descriptor);
+            // CREAMOS FICHEROS MAS PIQUEÑOS
+            create_smalls(file, read_buffer, bytes_readed, &wfile_name_counter);
+            wfile_name_counter++;
 
-            // ESCRIBIMOS EL FICHERO
-            
-
-            wfile_counter++;
-            int bytes_writed = write(wfile_descriptor, buffer, lectura_completa);
-            if (bytes_writed == -1) {
-                perror("Hubo un fallo en la escritura \n");
-                exit(1);
-            }
-
-            // CERRAMOS EL FICHERO
-            int close_id = close(wfile_descriptor);
-            if (close_id != -1) {
-                //printf("cerrado correctamente \n");
-            }
-            //printf("\n");
-            //printf("Se han escrito %d bytes \n", bytes_writed);
         }
 
     }
+}
 
+void
+split_files(int size_bytes,char *file)
+{
 
-    // IMPRIMIMOS POR EL DESCRIPTOR DE FICHERO 0 (SALIDA ESTANDAR)
-    /*
-    printf("Se han leido %d bytes \n", lectura_completa);
-    int bytes_writed = write(0, buffer, lectura_completa);
-    printf("Se han escrito %d bytes \n", bytes_writed);
-    */
+	// ABRIMOS EL FICHERO PARA LECTRA fd=file descriptor descritpor de ficharo
+    int rfile_descriptor = open_files(file, 1);
 
+    // LEEMOS Y MANIPULAMOS EL FICHERO
+    read_write_files(size_bytes, file, rfile_descriptor);
+    
+    // CERRAMOS EL FICHERO DE LECTURA
+    close_files(rfile_descriptor);
 
 }
 
 
-
-
-
 void
-split_func(int argc, char *argv[]) 
+split_data(int argc, char *argv[]) 
 {
-    int size_bytes = atoi(argv[1]);
-    char *file = argv[2];
+    if (argc < 3) {
+        args_err();
+    }
+    else
+    {
+        int size_bytes = atoi(argv[1]);
+        char *file = argv[2];
 
-
-    split_proccess(size_bytes, file);
+        split_files(size_bytes, file);
+    }
 
 }
 
@@ -133,7 +168,7 @@ int
 main(int argc, char *argv[]) 
 {
 
-    split_func(argc ,argv);
+    split_data(argc ,argv);
     return 0;
 
 }

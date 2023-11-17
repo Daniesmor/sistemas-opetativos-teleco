@@ -120,7 +120,7 @@ read_write_files(int size_bytes,char *file, int rfile_descriptor)
 
         // LEEMOS EL FICHERO
         bytes_readed = read(rfile_descriptor, read_buffer, size_bytes);
-        if (bytes_readed <= size_bytes) {
+        if ((bytes_readed <= size_bytes) && (bytes_readed != 0)) {
 
             // CREAMOS FICHEROS MAS PIQUEÑOS
             create_smalls(file, read_buffer, bytes_readed, &wfile_name_counter);
@@ -145,7 +145,6 @@ split_files(int size_bytes,char *file)
     close_files(rfile_descriptor);
 
 }
-
 
 void
 split_data(int argc, char *argv[]) 

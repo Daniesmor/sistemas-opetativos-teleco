@@ -9,6 +9,7 @@
 enum {
 	rfile_permissions = 0666,
 	wfile_permissions = 0664,
+	initial_bytes = 1024,
 };
 
 void
@@ -63,7 +64,7 @@ open_files(char *file, int mode)
 		args_err();
 	}
 
-    if (file_descriptor == -1) {
+	if (file_descriptor == -1) {
 		printf("lolazo");
 	}
 
@@ -112,27 +113,43 @@ create_smalls(char *file, char *read_buffer, int bytes_readed,
 }
 
 void
+ckeck_readed(int bytes_readed)
+{
+	if (bytes_readed < 0) {
+		perror("Error en la lectura del archivo");
+		exit(1);
+	}
+}
+
+void
 read_write_files(int size_bytes, char *file, int rfile_descriptor)
 {
-	int bytes_readed = 1;	//LE DEFINIMOS COMO1 PARA QUE PUEDA ENTRAR AL WHILE
-	char read_buffer[1000];
+	int buffer_size = initial_bytes;	// Tamaño inicial del búfer más pequeño
+	char *read_buffer = malloc(buffer_size);
+
+	if (read_buffer == NULL) {
+		perror("Error al asignar memoria");
+		exit(1);
+	}
+
 	int wfile_name_counter = 0;
+	int bytes_readed = 0;
 
-	while (bytes_readed != 0) {
-
-		// LEEMOS EL FICHERO
+	do {
 		bytes_readed = read(rfile_descriptor, read_buffer, size_bytes);
-		if ((bytes_readed <= size_bytes) && (bytes_readed != 0)) {
 
-			// CREAMOS FICHEROS MAS PIQUEÑOS
+		ckeck_readed(bytes_readed);
+
+		if ((bytes_readed <= size_bytes) && (bytes_readed != 0)) {
+			// Crear archivos más pequeños
 			create_smalls(file, read_buffer, bytes_readed,
 				      &wfile_name_counter);
 			wfile_name_counter++;
-
 		}
-
-
 	}
+	while (bytes_readed > 0);
+
+	free(read_buffer);
 }
 
 void

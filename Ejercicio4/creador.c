@@ -63,3 +63,40 @@ main(int argc, char *argv[])
     return 0;
 
 }
+
+
+
+
+
+
+
+void read_write_files(int size_bytes, char *file, int rfile_descriptor) {
+    int buffer_size = 1024; // Tamaño inicial del búfer más pequeño
+    char *read_buffer = malloc(buffer_size);
+
+    if (read_buffer == NULL) {
+        perror("Error al asignar memoria");
+        exit(1);
+    }
+
+    int wfile_name_counter = 0;
+    int bytes_readed = 0;
+
+    do {
+        bytes_readed = read(rfile_descriptor, read_buffer, size_bytes);
+
+        if (bytes_readed < 0) {
+            perror("Error en la lectura del archivo");
+            free(read_buffer);
+            exit(1);
+        }
+
+        if ((bytes_readed <= size_bytes) && (bytes_readed != 0)) {
+            // Aquí se debería escribir la lógica para crear archivos más pequeños
+             create_smalls(file, read_buffer, bytes_readed, &wfile_name_counter);
+             wfile_name_counter++;
+        }
+    } while (bytes_readed > 0);
+
+    free(read_buffer);
+}

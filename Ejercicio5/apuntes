@@ -1,0 +1,5 @@
+"Duplicar" en el contexto de dup() y dup2() se refiere a crear una copia de un descriptor de archivo existente. En programación, un descriptor de archivo es un número entero que representa un archivo abierto, un socket u otro recurso de E/S. Cuando duplicas un descriptor de archivo, estás creando una copia de ese número que apunta al mismo archivo o recurso.
+
+Por ejemplo, si tienes un descriptor de archivo que apunta a un archivo de texto, al duplicarlo obtienes un nuevo descriptor (con posiblemente un número de descriptor diferente) que también apunta al mismo archivo. Ambos descriptores de archivo comparten la misma tabla de archivos del sistema operativo y, por lo tanto, apuntan al mismo recurso subyacente.
+
+La duplicación de descriptores de archivo es útil para varias tareas, como redirigir la salida estándar a un archivo, crear varios flujos de entrada/salida para el mismo archivo o realizar múltiples operaciones de E/S concurrentes sobre un mismo recurso sin interferencias entre ellas.

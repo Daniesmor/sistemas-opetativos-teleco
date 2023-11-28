@@ -97,7 +97,15 @@ clean_line(char *line) {
 
 
 void 
-sha_create(char *line) {
+sha_create(char *line, int *status) {
+
+    int exists = open(line, READ_PERMISSION);
+    //file_creation_check(exists); // SI EL ARCHIVO QUE SE DESEA ENCRIPTAR NO EXISTE SE ESCRIBIRA ERROR POR LA SALIDA
+    
+    if (exists <= 0) {
+        *status = 1;
+    }
+    close(exists);
 
     int file_pid;
     switch (file_pid = fork()) {
@@ -105,22 +113,20 @@ sha_create(char *line) {
 		err(EXIT_FAILURE, "fork failed");
 	case 0:
 
-        int exists = open(line, READ_PERMISSION);
-        file_creation_check(exists); // SI EL ARCHIVO QUE SE DESEA ENCRIPTAR NO EXISTE SE ESCRIBIRA ERROR POR LA SALIDA
-        close(exists);
-
         // SI EXISTE SE ESCRIBIRÁ POR LA SALIDA EL SHA DEL ARCHIVO
         if (exists >= 0) { 
             execl("/bin/sha1sum", "sha1sum", line, NULL); //execl debe recibir un puntero que apunte a donde está el argumento
             err(EXIT_FAILURE, "exec failed");
-        }           
+        } else {
+            exit(1);
+        }          
             
 	}
    
 }
 
 void
-create_files(char *line) {
+create_files(char *line, int *status) {
     char *filename = filename_extractor(line);
 
     // CREAMOS EL ARCHIVO NUEVO CON EL NOMBRE DEL ARCHIVO A ENCRIPTAR
@@ -131,7 +137,7 @@ create_files(char *line) {
     if (dup2(fd, STDOUT_FILENO) == -1) {
         perror("Error to STDOUT redirection.");
     } else {
-        sha_create(line);
+        sha_create(line, status);
     }
     // CERRAMOS ARCHIVO A ENCRIPTAR
     close(fd);
@@ -139,9 +145,8 @@ create_files(char *line) {
 }
 
 void
-read_lines() {
+read_lines(int *status) {
 
-    
     char *line = (char *)malloc(LINE_BUFFER_SIZE); // Hacemos una asignación inicial de memoria de 256 caracteres por linea
     malloc_check(line);
     
@@ -149,7 +154,7 @@ read_lines() {
 
         // EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
         line = clean_line(line); //Limpiamos line porque alfinal tiene un '\n'
-        create_files(line);
+        create_files(line, status);
 
     }
 
@@ -161,11 +166,14 @@ read_lines() {
 int
 main(int argc, char *argv[])
 {
+    int status = 0;
+
     if (argc > 1){
 	    err(EXIT_FAILURE, "No arguments needed.");
     }
 
-    read_lines();
+    read_lines(&status);
+    exit(status);
 	return 0;
 
 }

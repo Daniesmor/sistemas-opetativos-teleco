@@ -36,7 +36,7 @@ file_creation_check(int fd)
 {
 
 	if (fd < 0) {
-		printf("ERROR");
+		printf("ERROR \n");
 		err(EXIT_FAILURE, "The file doesn't exists.");	// Mensaje de error con información adicional
 	}
 	return 0;

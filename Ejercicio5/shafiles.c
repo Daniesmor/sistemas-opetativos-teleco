@@ -95,6 +95,41 @@ clean_line(char *line) {
     return line;
 }
 
+int 
+collect_child_status(int *status) {
+    int child_status;
+    int new_status = *status;
+
+    if (wait(&child_status) == -1) {
+        // Manejar el error aquí, por ejemplo
+        err(EXIT_FAILURE, "The child process has an error");
+                
+    } 
+    else {
+        if (WIFEXITED(child_status)) {
+            // El proceso hijo ha terminado normalmente
+            if (WEXITSTATUS(child_status) > 0) {
+                new_status = WEXITSTATUS(child_status);
+            }
+                    
+        } else {
+            // El proceso hijo no terminó normalmente (por ejemplo, fue interrumpido)
+            err(EXIT_FAILURE, "The child process finalized with an error");
+                    
+        }
+    }
+    return new_status;
+    
+}
+
+void
+exist_file_checker(int exists){
+    if (exists < 0) {  //Si el archivo no existe, se sale en estatus de error.
+        //*status = 1;
+        printf("ERROR");
+        exit(EXIT_FAILURE);
+    }
+}
 
 
 void 
@@ -106,56 +141,35 @@ sha_create(char *line, int *status, int fd) {
         case -1:
             err(1, "fork failed");
         case 0:
+            // STDOUT_FILENO (nombre simbolico) -> 1
             if (dup2(fd, STDOUT_FILENO) == -1) {
-                perror("Error to STDOUT redirection.");
-                exit(1);
+                err(EXIT_FAILURE, "Error to STDOUT redirection.");
             }
 
-            int exists = open(line, READ_PERMISSION);
-            if (exists < 0) {
-                *status = 1;
-                printf("ERROR");
-                exit(1);
-            }
+            int exists = open(line, READ_PERMISSION); //Intentamos abrir el fichero que queremos encriptar
+            exist_file_checker(exists); 
+
 
             if (exists >= 0) {
                 // Cerrar el descriptor de archivo no necesario
                 close(fd);
-
-                // Redirigir la salida estándar al archivo
+                // exists es el descriptor de fichero que contiene la info que se quiere encriptar
+                // Redirigir la salida estándar al archivo STDIN_FILENO (nombre simbolico) -> 0 
                 if (dup2(exists, STDIN_FILENO) == -1) {
-                    perror("Error to STDIN redirection.");
                     close(exists);
-                    exit(1);
+                    err(EXIT_FAILURE, "Error to STDIN redirection.");
                 }
 
-                // Ejecutar sha1sum
-                execl("/usr/bin/sha1sum", "sha1sum", NULL); // Ruta a sha1sum puede variar
-                perror("execl failed");
+                // Ejecutar sha1sum (Lo que está ocurriendo sha1sum < exists)
+                execl("/usr/bin/sha1sum", "sha1sum", NULL); 
                 close(exists);
-                exit(1);
+                err(EXIT_FAILURE, "execl failed");
             }
             close(exists);
-            exit(0);
+            exit(EXIT_SUCCESS);
         default:
-            int child_status;
-
-            if (wait(&child_status) == -1) {
-                perror("wait");
-                // Manejar el error aquí, por ejemplo, retornar un código de error o salir del programa
-            } else {
-                if (WIFEXITED(child_status)) {
-                    // El proceso hijo ha terminado normalmente
-                    printf("ESto vale el status %d \n", WEXITSTATUS(child_status));
-                    if (WEXITSTATUS(child_status) > 0) {
-                        *status = WEXITSTATUS(child_status);
-                    }
-                    
-                } else {
-                    // El proceso hijo no terminó normalmente (por ejemplo, fue interrumpido)
-                    // Puede manejar este caso dependiendo de su lógica de programa
-                }
-            }
+            *status = collect_child_status(status); //Esta función recolecta el estado de salida del hijo 
+            
                 
     }
 
@@ -172,9 +186,6 @@ create_files(char *line, int *status) {
     
     sha_create(line, status, fd);
         
-    
-    
-    
     // CERRAMOS ARCHIVO A ENCRIPTAR
     close(fd);
     free(filename);

@@ -1,19 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
+
 
 enum {
     INITIAL_MAX_ARGS = 10,
 };
 
-
-struct Commands {
-    char first_command[50];
-    char seccond_command[50];
-    char third_command[50];
-};
-
-typedef struct Commands Commands;
 
 struct Command {
     char nombre[50]; // Campo para el nombre del comando
@@ -23,61 +17,126 @@ struct Command {
 
 typedef struct Command Command;
 
-void
-initializerCommands(char *argv[], Command *Comando1) {
 
-    strcpy(Comando1->nombre, argv[1]);
-    Comando1->argumentos = NULL;
-    Comando1->numArgumentos = 0;
+// ------------------------------ ACCIONES BASICAS ------------------------------------------------------------------
+
+void memLocateFailed() {
+    err(EXIT_FAILURE, "Error: Could not allocate memory for the argument.\n");
+}
+
+
+// --------------------------------- FIN ACCIONES BASICAS  --------------------------------------------------------
+
+// -------------------------------- CHECKEOS DE SEGURIDAD -------------------------------------------------------------------------------
+
+
+
+
+
+
+// ------------------------------ FIN DE CHECKEOS DE SEGURIDAD ------------------------------------------------------------------------
+
+void
+initializerCommands(char *argv[], Command *Commands[]) {
+
+    for (int i = 0; i<3; i++) {
+        Commands[i] = malloc(sizeof(Command));
+        
+        Commands[i]->argumentos = NULL;
+        Commands[i]->numArgumentos = 0;
+        //printf("%s \n", Commands[i]->nombre);
+    }
+
 
 }
 
 void
-addArgs(char *argv[], Command *Comando1) {
+addArgs(char *argv[], Command *Commands[]) {
+
+    for (int i = 0; i < 3; i++ ) {
+        char *token;
+        char *saveptr;
+
+        char *argv_copy = strdup(argv[i+1]); // PARA TRABAJAR CON STRTOK_ES CONVENIENTE USAR UNA COPIA DE ARGV
+
+        token = strtok_r(argv_copy, " ", &saveptr);
+        strcpy(Commands[i]->nombre, token); // ASIGNAMOS EL NOMBRE DE COMANDO
+
+
+        while (token != NULL) {
+            token = strtok_r(NULL, " ", &saveptr);
+
+            if (token != NULL) {
+                Commands[i]->argumentos = realloc(Commands[i]->argumentos, (Commands[i]->numArgumentos + 1)* sizeof(char *));
+                if (Commands[i]->argumentos == NULL) {
+                    memLocateFailed();
+                }
+
+
+                Commands[i]->argumentos[Commands[i]->numArgumentos] = malloc((strlen(token) + 1) * sizeof(char));
+                if (Commands[i]->argumentos[Commands[i]->numArgumentos] == NULL) {
+                    memLocateFailed();
+                }
+
+                
+                strcpy(Commands[i]->argumentos[Commands[i]->numArgumentos], token);
+                Commands[i]->numArgumentos++;
+                //token = strtok_r(NULL, " ", &saveptr);
+            }
+            
+        }
+
+        free(argv_copy);
+    }
+
     
-    Comando1->argumentos = realloc(Comando1->argumentos, (Comando1->numArgumentos + 1)* sizeof(char *));
-    if (Comando1->argumentos == NULL) {
-        printf("Error: no se pudo asignar memoria para el argumento.\n");
-        exit(EXIT_FAILURE);
-    }
 
-    Comando1->argumentos[Comando1->numArgumentos] = malloc((strlen("argumento") + 1) * sizeof(char));
-    if (Comando1->argumentos[Comando1->numArgumentos] == NULL) {
-        printf("Error: no se pudo asignar memoria para el argumento.\n");
-        exit(EXIT_FAILURE);
-    }
-    strcpy(Comando1->argumentos[Comando1->numArgumentos], "argumento");
-    Comando1->numArgumentos++;
-}
-
-void
-freeMem(Command *Comando1) {
     
-    for (int i = 0; i < Comando1->numArgumentos; i++) {
-        free(Comando1->argumentos[i]);
+    
+}
+
+void
+freeMem(Command *Commands[]) {
+    
+    for (int numCommand = 0; numCommand<3; numCommand++) {
+        for (int i = 0; i < (Commands[numCommand]->numArgumentos); i++) {
+            free(Commands[numCommand]->argumentos[i]);
+        }
+        free(Commands[numCommand]->argumentos);
+        free(Commands[numCommand]);
     }
-    free(Comando1->argumentos);
+
+    
 
 }
 
 void
-printCommand(Command *Comando1) {
-    printf("%s \n", Comando1->nombre);
-    for (int i = 0; i < Comando1->numArgumentos; i++) {
-        printf("%s \n", Comando1->argumentos[i]);
+printCommand(Command *Commands[]) {
+    for (int numCommand = 0; numCommand <3; numCommand++) {
+        printf("%s \n", Commands[numCommand]->nombre);
+        for (int i = 0; i < Commands[numCommand]->numArgumentos; i++) {
+            printf("%s \n", Commands[numCommand]->argumentos[i]);
+        }
     }
+    
 }
 
 int 
 main(int argc, char *argv[]) {
 
+    if (argc < 3) {
+        exit(EXIT_FAILURE);
+        err(EXIT_FAILURE,"ERROR: Yoy must enther 3 commands. \n");
+    }
+
     //Commands Commands_with_args;
-    Command Comando1;
-    initializerCommands(argv, &Comando1);
-    addArgs(argv, &Comando1);
-    printCommand(&Comando1);
-    freeMem(&Comando1);
-    //separate_commands(argv, &Comando1);
+    Command *Commands[3];
+    initializerCommands(argv, Commands);
+    
+    addArgs(argv,Commands);
+    printCommand(Commands);
+    freeMem(Commands);
+    //separate_commands(argv, &Command1);
 
     
 

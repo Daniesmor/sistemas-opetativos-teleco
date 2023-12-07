@@ -1,2 +1,71 @@
 
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum {
+    INITIAL_MAX_ARGS = 10,
+};
+
+
+
+
+struct Command {
+    char nombre[50]; // Campo para el nombre del comando
+    int numArgumentos; // Contador para llevar el seguimiento de la cantidad de argumentos
+    char **argumentos;
+};
+
+typedef struct Command Command;
+
+
+// ------------------------------ ACCIONES BASICAS ------------------------------------------------------------------
+
+void memLocateFailed() {
+    printf("Error: no se pudo asignar memoria para el argumento.\n");
+    exit(EXIT_FAILURE);
+}
+
+
+// --------------------------------- FIN ACCIONES BASICAS  --------------------------------------------------------
+
+// -------------------------------- CHECKEOS DE SEGURIDAD -------------------------------------------------------------------------------
+
+
+
+
+
+
+// ------------------------------ FIN DE CHECKEOS DE SEGURIDAD ------------------------------------------------------------------------
+
+void
+initializerCommands(char *argv[], Command *Commands[]) {
+
+    for (int i = 0; i<3; i++) {
+        strcpy(Commands[i]->nombre, argv[i]);
+        Commands[i]->argumentos = NULL;
+        Commands[i]->numArgumentos = 0;
+        printf("%s \n", Commands[i]->nombre);
+    }
+
+
+}
+
+
+int 
+main(int argc, char *argv[]) {
+
+    //Commands Commands_with_args;
+    Command *Commands[3];
+    initializerCommands(argv, Commands);
+    
+    //addArgs(argv,Commands);
+    //printCommand(Commands);
+    //freeMem(Commands);
+    //separate_commands(argv, &Command1);
+
+    
+
+    return 0;
+}

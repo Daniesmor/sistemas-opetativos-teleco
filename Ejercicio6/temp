@@ -1,0 +1,53 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct Comando {
+    char nombre[50]; // Campo para el nombre del comando
+    char** argumentos; // Array dinámico de punteros a strings para los argumentos
+    int cantidadArgumentos; // Contador para llevar el seguimiento de la cantidad de argumentos
+};
+
+void inicializarComando(struct Comando *comando, const char *nombreComando) {
+    strcpy(comando->nombre, nombreComando);
+    comando->argumentos = NULL; // Inicializar como NULL, sin asignación de memoria
+    comando->cantidadArgumentos = 0;
+}
+
+void agregarArgumento(struct Comando *comando, const char *nuevoArgumento) {
+    comando->argumentos = realloc(comando->argumentos, (comando->cantidadArgumentos + 1) * sizeof(char*)); // Reasignar memoria para un argumento más
+    comando->argumentos[comando->cantidadArgumentos] = malloc(strlen(nuevoArgumento) + 1); // Asignar memoria para el nuevo argumento
+    strcpy(comando->argumentos[comando->cantidadArgumentos], nuevoArgumento); // Copiar el argumento proporcionado al nuevo espacio asignado
+    comando->cantidadArgumentos++; // Incrementar el contador de argumentos
+}
+
+void liberarComando(struct Comando *comando) {
+    if (comando->argumentos != NULL) {
+        for (int i = 0; i < comando->cantidadArgumentos; ++i) {
+            free(comando->argumentos[i]);
+        }
+        free(comando->argumentos);
+    }
+}
+
+int main() {
+    struct Comando comando;
+    inicializarComando(&comando, "wc"); // Inicializar el comando con el nombre "wc"
+
+    // Agregar argumentos
+    agregarArgumento(&comando, "-l");
+    agregarArgumento(&comando, "archivo.txt");
+    // ...
+
+    // Mostrar el comando y sus argumentos
+    printf("Comando: %s\n", comando.nombre);
+    printf("Argumentos:\n");
+    for (int i = 0; i < comando.cantidadArgumentos; ++i) {
+        printf("%s\n", comando.argumentos[i]);
+    }
+
+    // Liberar la memoria asignada para los argumentos
+    liberarComando(&comando);
+
+    return 0;
+}

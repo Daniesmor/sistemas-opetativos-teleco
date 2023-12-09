@@ -33,6 +33,43 @@ void memLocateFailed() {
     err(EXIT_FAILURE, "Error: Could not allocate memory for the argument.\n");
 }
 
+char** reserve_args(Command *cmd) {
+
+    cmd->argumentos = realloc(cmd->argumentos, (cmd->numArgumentos + 1) * sizeof(char *));
+    return cmd->argumentos;
+
+}
+
+char ** reserve_args_token(Command *cmd, int token_size) {
+    cmd->argumentos[cmd->numArgumentos] = malloc((token_size + 1) * sizeof(char));
+    return cmd->argumentos;
+}
+
+void
+assignCommandName(Command *cmd, char *name) {
+    strcpy(cmd->nombre, name); //Para poder asignar un string a un struct, es necesario usar strcpy
+}
+
+void 
+addArgumentsToken(Command *cmd, char *token) {
+    strcpy(cmd->argumentos[cmd->numArgumentos], token);
+    cmd->numArgumentos++;
+}
+
+void
+setLastArgumentNull(Command *cmd) {
+
+    if (reserve_args(cmd) == NULL) {
+        // Manejar el error de asignación de memoria
+        memLocateFailed();
+        //free(argv_copy);
+        return;
+    }
+
+    cmd->argumentos[cmd->numArgumentos] = NULL; // Establecer el último elemento como NULL
+}
+
+
 
 // --------------------------------- FIN ACCIONES BASICAS  --------------------------------------------------------
 
@@ -59,65 +96,65 @@ initializerCommands(char *argv[], Command *Commands[]) {
 
 }
 
-void
-addArgs(char *argv[], Command *Commands[]) {
-
+void addArgs(char *argv[], Command *Commands[]) {
     for (int i = 0; i < NUM_PARAMS; i++ ) {
         char *token;
         char *saveptr;
 
-        char *argv_copy = strdup(argv[i+1]); // PARA TRABAJAR CON STRTOK_ES CONVENIENTE USAR UNA COPIA DE ARGV
-
-        token = strtok_r(argv_copy, " ", &saveptr);
-        strcpy(Commands[i]->nombre, token); // ASIGNAMOS EL NOMBRE DE COMANDO
-
-
-        while (token != NULL) {
-            token = strtok_r(NULL, " ", &saveptr);
-
-            if (token != NULL) {
-                Commands[i]->argumentos = realloc(Commands[i]->argumentos, (Commands[i]->numArgumentos + 1)* sizeof(char *));
-                if (Commands[i]->argumentos == NULL) {
-                    memLocateFailed();
-                }
-
-
-                Commands[i]->argumentos[Commands[i]->numArgumentos] = malloc((strlen(token) + 1) * sizeof(char));
-                if (Commands[i]->argumentos[Commands[i]->numArgumentos] == NULL) {
-                    memLocateFailed();
-                }
-
-                
-                strcpy(Commands[i]->argumentos[Commands[i]->numArgumentos], token);
-                Commands[i]->numArgumentos++;
-                //token = strtok_r(NULL, " ", &saveptr);
-            }
-            
+        char *argv_copy = strdup(argv[i+1]);
+        if (argv_copy == NULL) {
+            // Manejar el error de asignación de memoria
+            memLocateFailed();
+            return;
         }
 
+        token = strtok_r(argv_copy, " ", &saveptr);
+        assignCommandName(Commands[i], token);
+        
+
+        while (token != NULL) {
+            if (Commands[i]->numArgumentos !=0) {
+                token = strtok_r(NULL, " ", &saveptr);
+            }
+
+
+            if (token != NULL) {
+                
+                if (reserve_args(Commands[i]) == NULL) {
+                    // Manejar el error de asignación de memoria
+                    memLocateFailed();
+                    free(argv_copy);
+                    return;
+                }
+
+
+                if (reserve_args_token(Commands[i], strlen(token)) == NULL) {
+                    // Manejar el error de asignación de memoria
+                    memLocateFailed();
+                    free(argv_copy);
+                    return;
+                }
+
+                addArgumentsToken(Commands[i], token);
+                
+            }
+        }
         free(argv_copy);
+        setLastArgumentNull(Commands[i]);
+
     }
-
-    
-
-    
-    
 }
 
-void
-freeMem(Command *Commands[]) {
-    
-    for (int numCommand = 0; numCommand<NUM_PARAMS; numCommand++) {
-        for (int i = 0; i < (Commands[numCommand]->numArgumentos); i++) {
+void freeMem(Command *Commands[]) {
+    for (int numCommand = 0; numCommand < NUM_PARAMS; numCommand++) {
+        for (int i = 0; i < Commands[numCommand]->numArgumentos; i++) {
             free(Commands[numCommand]->argumentos[i]);
         }
         free(Commands[numCommand]->argumentos);
         free(Commands[numCommand]);
     }
-
-    
-
 }
+
 
 void
 printCommand(Command *Commands[]) {
@@ -154,7 +191,6 @@ searchExec(Command *cmd) {
             return 1;
         }
     }
-    
 
     return 0;
 
@@ -178,7 +214,7 @@ execCmd(Command *cmd) {
 void 
 executeCommands(Command *Commands[]) {
     int pipes[NUM_PARAMS-1][2];
-  
+    
 
     for (int i = 0; i < NUM_PARAMS -1; i++) {
         if (pipe(pipes[i]) == -1) {
@@ -188,6 +224,8 @@ executeCommands(Command *Commands[]) {
 
     // Creamos un proceso que cambia de ruta hacia el ejecutable para ver si existe (si devuelve 0 ha sido exitoso).
     for (int numCommand = 0; numCommand < NUM_PARAMS; numCommand++) {
+
+
         if (searchExec(Commands[numCommand]) != 0) {
             printf("The command %s doesn't exists. \n", Commands[numCommand]->nombre);
             exit(EXIT_FAILURE);
@@ -205,67 +243,42 @@ executeCommands(Command *Commands[]) {
     }
 
 
-    int child1, child2, child3;
+    int child;
 
-    switch (child1 = fork()) { // ---------- HIJO 1
-        case -1:
-            err(EXIT_FAILURE, "Theres an error with the child proccess");
-        case 0:
-            close(pipes[0][0]);
-            dup2(pipes[0][1], STDOUT_FILENO);
-            close(pipes[0][1]);
-            execlp("/bin/ls", "ls", "-l", "/", NULL);
-        default:
-            close (pipes[0][1]);
-            switch (child2 = fork()) { // ---------- HIJO 2
-                case -1:
-                    err(EXIT_FAILURE, "Theres an error with the child proccess");
-                case 0:
-                    
-                    dup2(pipes[0][0], STDIN_FILENO);
-                    close(pipes[0][0]);
+    for (int numCommand=0; numCommand<NUM_PARAMS; numCommand++) {
+        switch (child = fork()) { // ---------- HIJO 1
+            case -1:
+                err(EXIT_FAILURE, "Theres an error with the child proccess");
+            case 0:
+                if (numCommand > 0) { //SI NO ES EL PRIMER COMANDO, LA ENTRADA LA TIENE QUE LEER DEL COMANDO ANTERIOR
+                    dup2(pipes[numCommand-1][0], STDIN_FILENO); //Si no es el pirmer comando, deberá leer la entrada de la salida del anterior.
+                    close(pipes[numCommand-1][0]); //Como en dup2 ya se ha hecho el duplicado, podemos cerrar el pipe
+                    close(pipes[numCommand-1][1]); //Del pipe que lo precede, solo queremos leer la entrada, por lo tanto cerramos la escritura
+        
+                }
+                if (numCommand < NUM_PARAMS -1 ) { //SI NO ES EL ULTIMO COMANDO, LA SALIDA DEBE SER ENVIADA AL SIGUIENTE COMANDO
+                    close(pipes[numCommand][0]); // COMO QUEREMOS ESCRIBIR EN EL PIPE QUE LO UNE CON EL SIG COMANDO, PODEMOS CERRAR EL EXTREMO DE LECTURA
+                    dup2(pipes[numCommand][1], STDOUT_FILENO); //REDIRIGIMOS LA SALIDA AL PIPE QUE LO UNE CON EL SIG COMANDO
+                    close(pipes[numCommand][1]); // COMO YA HEMOS HECHO EL DUPLICADO CON DUP2, LO PODEMOS BORRAR
+                }
+                // EJECUTAMOS EL COMANDO Y LO MANEJAMOS EN CASO DE ERROR
+                execv(Commands[numCommand]->path, Commands[numCommand]->argumentos);
+                printf("There's an error executing the comand %s. \n", Commands[numCommand]->nombre);
+                exit(EXIT_FAILURE);
+            default:
+                // UNA VEZ QUE SE EJECUTE EL COMANDO, EL PADRE CERRARÁ LO QUE YA NO SE VA A VOLVER A USAR
+                if (numCommand < NUM_PARAMS -1) {
+                    close(pipes[numCommand][1]); // Cierra el extremo de escritura del pipe actual
+                }
 
-                    close(pipes[1][0]);
-                    dup2(pipes[1][1], STDOUT_FILENO);
-                    close(pipes[1][1]);
-                    execlp("/bin/grep","grep", "u",NULL);
-                default:
-                    
-                    close(pipes[1][1]);
-                    close(pipes[0][0]);
-                    switch (child3 = fork()) { // ---------- HIJO 3
-                        case -1:
-                            err(EXIT_FAILURE, "Theres an error with the child proccess");
-                        case 0:
-                            dup2(pipes[1][0], STDIN_FILENO);
-                            close(pipes[1][0]);
-                            execlp("/usr/bin/wc","wc", "-l",NULL);
-                        default:
-                            close(pipes[1][0]);
-
-                            int status;
-                            wait(&status);
-                            wait(&status);
-                            wait(&status);
-
-                    }
-
-            }
-
+        }
     }
 
-
-
-
-
-    //close(pipefd1[0]); //CERRAMOS EL EXTREMO DE LECTURA PORQUE VAMOS A ESCRIBIR
-    //execCmd(Commands[0], STDIN_FILENO ,pipefd1[1]);
-
-
-    //close(pipefd1[1]); //CERRAMOS EL EXTREMO DE ESCRITURA PORQUE VAMOS A LEER
-    //close(pipefd2[0]);
-    //execCmd(Commands[1], pipefd1[0] ,pipefd2[1]);
-    //execCmd(Commands[2], pipefd2[0], STDOUT_FILENO);
+    // Código del padre que espera a todos los hijos
+    for (int i = 0; i < NUM_PARAMS; i++) {
+        int status;
+        wait(&status);
+    }
 
 }
     

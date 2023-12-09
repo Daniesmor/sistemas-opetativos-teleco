@@ -69,18 +69,7 @@ setLastArgumentNull(Command *cmd) {
     cmd->argumentos[cmd->numArgumentos] = NULL; // Establecer el último elemento como NULL
 }
 
-
-
 // --------------------------------- FIN ACCIONES BASICAS  --------------------------------------------------------
-
-// -------------------------------- CHECKEOS DE SEGURIDAD -------------------------------------------------------------------------------
-
-
-
-
-
-
-// ------------------------------ FIN DE CHECKEOS DE SEGURIDAD ------------------------------------------------------------------------
 
 void
 initializerCommands(char *argv[], Command *Commands[]) {
@@ -92,7 +81,6 @@ initializerCommands(char *argv[], Command *Commands[]) {
         Commands[i]->numArgumentos = 0;
         //printf("%s \n", Commands[i]->nombre);
     }
-
 
 }
 
@@ -156,17 +144,6 @@ void freeMem(Command *Commands[]) {
 }
 
 
-void
-printCommand(Command *Commands[]) {
-    for (int numCommand = 0; numCommand <NUM_PARAMS; numCommand++) {
-        printf("%s \n", Commands[numCommand]->nombre);
-        for (int i = 0; i < Commands[numCommand]->numArgumentos; i++) {
-            printf("%s \n", Commands[numCommand]->argumentos[i]);
-        }
-    }
-    
-}
-
 int
 searchExec(Command *cmd) {
     
@@ -213,39 +190,21 @@ execCmd(Command *cmd) {
 
 void 
 executeCommands(Command *Commands[]) {
-    int pipes[NUM_PARAMS-1][2];
-    
+    int pipes[NUM_PARAMS-1][2], child;
 
-    for (int i = 0; i < NUM_PARAMS -1; i++) {
-        if (pipe(pipes[i]) == -1) {
-            err(EXIT_FAILURE, "Theres an error creating the first pipe.");
-        }  
-    }
-
-    // Creamos un proceso que cambia de ruta hacia el ejecutable para ver si existe (si devuelve 0 ha sido exitoso).
-    for (int numCommand = 0; numCommand < NUM_PARAMS; numCommand++) {
-
-
-        if (searchExec(Commands[numCommand]) != 0) {
-            printf("The command %s doesn't exists. \n", Commands[numCommand]->nombre);
-            exit(EXIT_FAILURE);
-            //printf("Se puede ejecutar el execv \n");
-            //printf("%s \n", Commands[numCommand]->path);
-            //printf("%s \n", *Commands[i]->argumentos);
-            //for (int i = 0; i < Commands[numCommand]->numArgumentos; i++) {
-              //  printf("%s \n", Commands[numCommand]->argumentos[i]);
-            //}
-            //execv(Commands[numCommand]->path, Commands[numCommand]->argumentos);
-            //execCmd(Commands[numCommand]);
-            //execl("/bin/ls", "-l", "/", NULL);
+    for (int numCommand=0; numCommand<NUM_PARAMS; numCommand++) { 
+        if (searchExec(Commands[numCommand]) != 0) {    // Creamos un proceso que cambia de ruta hacia el ejecutable para ver si existe (si devuelve 0 ha sido exitoso).
+                    printf("The command %s doesn't exists. \n", Commands[numCommand]->nombre);
+                    exit(EXIT_FAILURE);
         }
-        
-    }
 
+        //CREAMOS LOS PIPES
+        if (numCommand < NUM_PARAMS - 1) {
+            if (pipe(pipes[numCommand]) == -1) {
+                err(EXIT_FAILURE, "Theres an error creating the first pipe.");
+            }  
+        }
 
-    int child;
-
-    for (int numCommand=0; numCommand<NUM_PARAMS; numCommand++) {
         switch (child = fork()) { // ---------- HIJO 1
             case -1:
                 err(EXIT_FAILURE, "Theres an error with the child proccess");
@@ -283,7 +242,6 @@ executeCommands(Command *Commands[]) {
 }
     
 
-
 int 
 main(int argc, char *argv[]) {
 
@@ -292,17 +250,12 @@ main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    //Commands Commands_with_args;
     Command *Commands[NUM_PARAMS];
     initializerCommands(argv, Commands);
     
     addArgs(argv,Commands);
-    //printCommand(Commands);
     executeCommands(Commands);
     freeMem(Commands);
-    //separate_commands(argv, &Command1);
-
-    
 
     return 0;
 }

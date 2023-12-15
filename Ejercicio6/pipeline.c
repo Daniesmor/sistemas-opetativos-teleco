@@ -12,13 +12,12 @@
 enum {
 	INITIAL_MAX_ARGS = 10,
 	COMMAND_LENGTH = 256,
-	MAX_PATH = 1024,
 	NUM_PARAMS = 3,
 };
 
 struct Command {
-	char nombre[COMMAND_LENGTH];	// Campo para el nombre del comando
-	char path[MAX_PATH];
+	char *nombre;	// Campo para el nombre del comando
+	char *path;
 	int numArgumentos;	// Contador para llevar el seguimiento de la cantidad de argumentos
 	char **argumentos;
 };
@@ -55,7 +54,7 @@ reserve_args_token(Command *cmd, int token_size)
 void
 assignCommandName(Command *cmd, char *name)
 {
-	strcpy(cmd->nombre, name);	//Para poder asignar un string a un struct, es necesario usar strcpy
+	cmd->nombre = strdup(name);
 }
 
 void
@@ -168,13 +167,13 @@ searchExec(Command *cmd)
 	strcpy(full_path, PATH1);
 	strcat(full_path, cmd->nombre);
 	if (access(full_path, F_OK) == 0) {
-		strcpy(cmd->path, full_path);
+		cmd->path = strdup((char *)full_path);
 		return 0;
 	} else {
 		strcpy(full_path, PATH2);
 		strcat(full_path, cmd->nombre);
 		if (access(full_path, F_OK) == 0) {
-			strcpy(cmd->path, full_path);
+			cmd->path = strdup((char *)full_path);
 			return 0;
 		} else {
 			return 1;

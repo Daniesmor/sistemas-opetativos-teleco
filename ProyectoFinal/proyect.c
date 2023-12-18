@@ -79,8 +79,9 @@ initializerCommand(Command *cmd)
 }
 
 char **
-reserve_args(Command *cmd)
+reserve_args(Command *cmd) 
 {
+	// Reserva espacio para tener una lista con tantos punteros como argumentos halla.
 
 	cmd->argumentos =
 	    realloc(cmd->argumentos, (cmd->numArgumentos + 1) * sizeof(char *));
@@ -94,6 +95,7 @@ assignCommandName(Command *cmd, char *name)
 {
 	cmd->nombre = strdup(name);
 }
+// ----------------------------- FIN DE GESTION DEL STRUCT COMMAND ----------------------------------------------------------------------
 
 
 // ---------------------------- GESTION DEL STRUCT COMMANDS ------------------------------------------------------------------------------------
@@ -132,60 +134,58 @@ void
 tokenizator(char *line, Commands *cmds) 
 {
     
+	char *token;
+	char *saveptr;
 
 
-		char *token;
-		char *saveptr;
+	//SETEAMOS EL PRIMER COMANDO
+	if (reserve_commands(cmds) == NULL) {
+		// Manejar el error de asignación de memoria
+		memLocateFailed();
 
-
-		//SETEAMOS EL PRIMER COMANDO
-		if (reserve_commands(cmds) == NULL) {
-			// Manejar el error de asignación de memoria
-			memLocateFailed();
-
-			return;
-		}
+		return;
+	}
 
 
 		
-		token = strtok_r(line, " ", &saveptr); //Token es una dir de memoria
-        assignCommandName(cmds->comandos[cmds->numCommands], token);
+	token = strtok_r(line, " ", &saveptr); //Token es una dir de memoria
+    assignCommandName(cmds->comandos[cmds->numCommands], token);
 		
 		//cmds->numCommands++;
 		
-		while (token != NULL) {
+	while (token != NULL) {
 
-			if (cmds->comandos[cmds->numCommands]->numArgumentos != 0) {
-				token = strtok_r(NULL, " ", &saveptr);
-			}
+		if (cmds->comandos[cmds->numCommands]->numArgumentos != 0) {
+			token = strtok_r(NULL, " ", &saveptr);
+		}
 
-			if (token != NULL) {
-				if (strcmp(token, "|") == 0) { //strcmp() compara el contenido de las cadenas token y "|". Si son iguales, devuelve cero; de lo contrario, devuelve un valor distinto de cero.
-					cmds->numCommands++;
+		if (token != NULL) {
+			if (strcmp(token, "|") == 0) { //strcmp() compara el contenido de las cadenas token y "|". Si son iguales, devuelve cero; de lo contrario, devuelve un valor distinto de cero.
+				cmds->numCommands++;
 
-					if (reserve_commands(cmds) == NULL) {
-						// Manejar el error de asignación de memoria
-						memLocateFailed();
-						return;
-					}
-
-					token = strtok_r(NULL, " ", &saveptr);
-					assignCommandName(cmds->comandos[cmds->numCommands], token);
-				}
-
-				if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+				if (reserve_commands(cmds) == NULL) {
 					// Manejar el error de asignación de memoria
 					memLocateFailed();
 					return;
 				}
-				
-				cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
-				cmds->comandos[cmds->numCommands]->numArgumentos++;
 
+				token = strtok_r(NULL, " ", &saveptr);
+				assignCommandName(cmds->comandos[cmds->numCommands], token);
 			}
-		}
 
-		cmds->numCommands++;
+			if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+				// Manejar el error de asignación de memoria
+				memLocateFailed();
+				return;
+			}
+				
+			cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
+			cmds->comandos[cmds->numCommands]->numArgumentos++;
+
+		}
+	}
+
+	cmds->numCommands++;
 }
 
 
@@ -231,6 +231,34 @@ read_lines(int *status, Commands *cmds)
 }
 // ----------------------- FIN DE FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
 
+void
+free_command(Commands *cmds)
+{
+	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+		free(cmds->comandos[numCommand]->nombre);
+		for (int i = 0; i < cmds->comandos[numCommand]->numArgumentos; i++) {
+			free(cmds->comandos[numCommand]->argumentos[i]);
+		}
+		free(cmds->comandos[numCommand]->argumentos);
+		free(cmds->comandos[numCommand]);
+	}
+}
+
+void
+free_commands(Commands *cmds)
+{
+
+	free(cmds->comandos);
+	//free(cmds);
+}
+
+void
+free_mem(Commands *cmds)
+{
+	free_command(cmds);
+	free_commands(cmds);
+}
+
 void 
 commands_printer(Commands *cmds) {
 
@@ -261,6 +289,8 @@ main(int argc, char *argv[])
 
 	read_lines(&status, &Comandos);
 	commands_printer(&Comandos);
+	free_mem(&Comandos);
+	
 	exit(status);
 	return 0;
 

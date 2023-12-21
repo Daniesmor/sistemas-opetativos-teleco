@@ -75,6 +75,7 @@ initializerCommand(Command *cmd)
 	cmd->nombre = NULL;
 	cmd->argumentos = NULL;
 	cmd->numArgumentos = 0;
+	cmd->path = NULL;
 
 }
 
@@ -123,12 +124,26 @@ reserve_commands(Commands *cmds) //GESTIONA LA LISTA QUE CONTENDRÁ LOS PUNTEROS
 
 }
 
+void
+setLastArgumentNull(Command *cmd)
+{
+
+	if (reserve_args(cmd) == NULL) {
+		// Manejar el error de asignación de memoria
+		memLocateFailed();
+		//free(argv_copy);
+		return;
+	}
+
+	cmd->argumentos[cmd->numArgumentos] = NULL;	// Establecer el último elemento como NULL
+}
+
 
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMANDS -----------------------------------------------------------------------------
 
 
 
-// ----------------------- FUNCIONES PARA TOKENIZAR ENTRADA ----------------------------------------------------------------------------------
+// ----------------------- FUNCIONES PARA TOKENIZAR ENTRADA Y SETEAR COMANDOS Y SUS RESPECTIVOS ARGUMENTOS ----------------------------------------------------------------------------------
 
 void
 tokenizator(char *line, Commands *cmds) 
@@ -161,6 +176,7 @@ tokenizator(char *line, Commands *cmds)
 
 		if (token != NULL) {
 			if (strcmp(token, "|") == 0) { //strcmp() compara el contenido de las cadenas token y "|". Si son iguales, devuelve cero; de lo contrario, devuelve un valor distinto de cero.
+				setLastArgumentNull(cmds->comandos[cmds->numCommands]);
 				cmds->numCommands++;
 
 				if (reserve_commands(cmds) == NULL) {
@@ -184,7 +200,7 @@ tokenizator(char *line, Commands *cmds)
 
 		}
 	}
-
+	setLastArgumentNull(cmds->comandos[cmds->numCommands]);
 	cmds->numCommands++;
 }
 
@@ -231,11 +247,112 @@ read_lines(int *status, Commands *cmds)
 }
 // ----------------------- FIN DE FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
 
+// ----------------------- FUNCIONES DEDICADAS A LA BUSCADA DE EJECUTABLES EN DIFERENTES PATHS -------------------------------------------------------
+
+void
+searchin_paths(Command *cmd) 
+{
+	printf("-----> Buscamos en $PATHS \n");
+	
+	char *sh_paths = getenv("PATH"); //ESTO NOS DEVUELVE LA LISTA DE LA VAR. PATHS DE LA SHELL, SEPARADOS POR ":", POR LO QUE HAY QUE TOKENIZARLA
+		
+	char *sh_paths_copy = strdup(sh_paths);
+
+	char *token;
+	char *saveptr;
+	char *current_dir;
+
+	token = strtok_r(sh_paths_copy, ":", &saveptr);
+
+	while (token != NULL) {
+		current_dir = malloc(strlen(token) + 2 + strlen(cmd->nombre));  // +2 para el '/' y '\0' y luego lo que ocupe el nombre del comando
+		if (current_dir == NULL) {
+			memLocateFailed();
+		}
+		strcpy(current_dir, token);
+		strcat(current_dir, "/");
+		strcat(current_dir, cmd->nombre);
+		printf("Se esta buscando en: %s \n", current_dir);
+
+		//BUSCAMOS EL EXEC, Y NOS QUEDAREMOS CON EL ULTIMO PATH DONDE SE HALLA ENCONTRADO SI ES QUE SE HA ENCONTRADO EN VARIOS
+		
+		if (access(current_dir, F_OK) == 0) {
+			if (cmd->path != NULL) {
+                free(cmd->path);
+            }
+			cmd->path = strdup(current_dir);
+			printf("Se ha encontrado en: %s \n", cmd->path);
+		}
+		free(current_dir);		
+		token = strtok_r(NULL, ":", &saveptr);
+	}
+	free(sh_paths_copy);
+}
+
+
+
+void
+searchin_pwd(Command *cmd) 
+{
+	
+	printf("-----> Buscamos %s en el working directory \n", cmd->nombre);	
+	if (access(cmd->nombre, F_OK) == 0) {
+		printf("El comando %s se ha encontrado en working directory \n", cmd->nombre);
+		char *actual_dir = strcat(getcwd(NULL, 0), "/"); //DE ESTA MANERA GETCWD, UTILIZA UN BUFFER DE MEMORIA DINAMICO PARA LA RUTA DEL PATH PWD
+		//char *full_path = strcat(actual_dir,"/");
+		char *full_path = strcat(actual_dir,cmd->nombre);
+
+		cmd->path = strdup(full_path); //HACEMOS UNA COPIA Y ASIGNAMOS (AHORA YA PODEMOS LIBERAR EL ORIGINAL)
+		//create_path(); // CREA UN PATH CON LA RUTA, Y AL FINAL EL NOMBRE DEL ARCHIVO CONCATENADO
+		free(actual_dir); //LIBERAMOS EL ORIGINAL
+		free(full_path);
+	}
+	else {
+		printf("El comando %s NO se ha encontrado en working directory \n", cmd->nombre);
+		// No lo hemos encontrado en el dir actual, asi que lo buscamos en la lista de paths
+		searchin_paths(cmd);			
+	}
+
+}
+
+int 
+is_builtin(Command *cmd) {
+	return 0; //ES BUILT IN
+}
+
+
+void
+search_paths(Commands *cmds) {
+
+	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+		printf("-------- BUSCANDO EJECUTABLES DE %s -----------\n", cmds->comandos[numCommand]->nombre);
+		//searchin_builtins();
+		if (is_builtin != 0) {
+			searchin_pwd(cmds->comandos[numCommand]); //SI NO ES BUILT IN TENDREMOS QUE BUSCAR EL EXEC
+		}
+		
+		// COMPROBAMOS SI SE HA ENCONRADO EN ALGUNA DE LAS FUNCIONES
+		if (cmds->comandos[numCommand]->path == NULL) {
+			printf("Command %s not found. \n", cmds->comandos[numCommand]->nombre);
+		}
+	}
+
+}
+
+
+
+
+
+// ----------------------- FIN DE FUNCIONES DEDICADAS A LA BUSCADA DE EJECUTABLES EN DIFERENTES PATHS -------------------------------------------------
+
+
+// ----------------------- FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
 void
 free_command(Commands *cmds)
 {
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
 		free(cmds->comandos[numCommand]->nombre);
+		free(cmds->comandos[numCommand]->path);
 		for (int i = 0; i < cmds->comandos[numCommand]->numArgumentos; i++) {
 			free(cmds->comandos[numCommand]->argumentos[i]);
 		}
@@ -249,7 +366,7 @@ free_commands(Commands *cmds)
 {
 
 	free(cmds->comandos);
-	//free(cmds);
+
 }
 
 void
@@ -259,12 +376,15 @@ free_mem(Commands *cmds)
 	free_commands(cmds);
 }
 
+// ----------------------- FIN DE FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
+
 void 
 commands_printer(Commands *cmds) {
 
 	for (int numCommand=0; numCommand <cmds->numCommands; numCommand++) {
 		printf("----COMANDO %d ------\n", numCommand);
-		printf("%s \n",cmds->comandos[numCommand]->nombre);
+		printf("Comando: %s \n",cmds->comandos[numCommand]->nombre);
+		printf("Path: %s \n",cmds->comandos[numCommand]->path);
 		for(int numArg=0; numArg < cmds->comandos[numCommand]->numArgumentos; numArg++) {
 			printf("Argumento %d: %s \n",numArg,cmds->comandos[numCommand]->argumentos[numArg]);
 		}
@@ -288,6 +408,8 @@ main(int argc, char *argv[])
 	}
 
 	read_lines(&status, &Comandos);
+	
+	search_paths(&Comandos);
 	commands_printer(&Comandos);
 	free_mem(&Comandos);
 	

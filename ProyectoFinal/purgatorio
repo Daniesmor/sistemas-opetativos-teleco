@@ -1,0 +1,35 @@
+void
+searchin_paths(Commands *cmds) 
+{
+
+	
+
+		char *sh_paths = getenv("PATH"); //ESTO NOS DEVUELVE LA LISTA DE LA VAR. PATHS DE LA SHELL, SEPARADOS POR ":", POR LO QUE HAY QUE TOKENIZARLA
+		//printf("Paths de la shell %s \n", sh_paths);
+		
+		
+
+
+
+		for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+			char *token;
+			char *saveptr;
+
+			token = strtok_r(sh_paths, ":", &saveptr); 
+			
+			char *current_dir = strcat(token, "/");	//ESTA ES LA PRIMERA RUTA D ELA LISTA
+			// PARA ESTA PRIMERA RUTA VAMOS A BUSCAR SI EXISTE EL EJECUTABLE DE ALGUN COMANDO
+			//char *full_path = strcat(current_dir,cmds->comandos[numCommand]->nombre);
+			
+			while (token != NULL) {
+
+				printf("Se esta buscando en %s: \n", current_dir);
+
+				token = strtok_r(NULL, ":", &saveptr);
+				current_dir = strcat(token, "/");	//ESTA ES LA PRIMERA RUTA D ELA LISTA
+
+			}
+			
+		}
+
+}

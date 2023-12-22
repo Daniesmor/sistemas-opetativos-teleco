@@ -7,7 +7,7 @@
 #include <sys/wait.h>
 #include <string.h>
 
-// ----------------------- ESTRUCTURAS DE DATOS UTILIZADAS --------------------------------------------------------------------------------------
+// ----------------------- PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
 enum {
 	MAX_PATH_LENGTH = 256,
@@ -18,6 +18,15 @@ enum {
 	RW_PERMISSION = 0640,
     NUM_PARAMS = 3,
 };
+
+const char *builtin_cmds[] = {
+	"ifok", 
+	"ifnot", 
+};
+
+// ----------------------- FIN DE PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
+
+// ----------------------- ESTRUCTURAS DE DATOS UTILIZADAS --------------------------------------------------------------------------------------
 
 struct Command {
 	char *nombre;	// Campo para el nombre del comando
@@ -317,7 +326,15 @@ searchin_pwd(Command *cmd)
 
 int 
 is_builtin(Command *cmd) {
-	return 0; //ES BUILT IN
+	int found = 0;
+
+	for (int i = 0; builtin_cmds[i] != NULL; i++) {
+		if(strcmp(cmd->nombre, builtin_cmds[i]) == 0) {
+			found = 1; //ES UN COMANDO BUILT IN
+			cmd->path = strdup("built-in");
+		}  
+	}
+	return found; //ES BUILT IN
 }
 
 
@@ -327,23 +344,120 @@ search_paths(Commands *cmds) {
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
 		printf("-------- BUSCANDO EJECUTABLES DE %s -----------\n", cmds->comandos[numCommand]->nombre);
 		//searchin_builtins();
-		if (is_builtin != 0) {
-			searchin_pwd(cmds->comandos[numCommand]); //SI NO ES BUILT IN TENDREMOS QUE BUSCAR EL EXEC
-		}
+		if (is_builtin(cmds->comandos[numCommand]) != 1) {
+			searchin_pwd(cmds->comandos[numCommand]); //SI NO ES BUILT-IN TENDREMOS QUE BUSCAR EL EXEC
+		} 
 		
 		// COMPROBAMOS SI SE HA ENCONRADO EN ALGUNA DE LAS FUNCIONES
 		if (cmds->comandos[numCommand]->path == NULL) {
 			printf("Command %s not found. \n", cmds->comandos[numCommand]->nombre);
+			exit(1);
 		}
 	}
 
 }
 
 
-
-
-
 // ----------------------- FIN DE FUNCIONES DEDICADAS A LA BUSCADA DE EJECUTABLES EN DIFERENTES PATHS -------------------------------------------------
+
+// ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
+
+void
+exec_cmd(Command *cmd)
+{
+	int child;
+
+	switch (child = fork()) {
+	case -1:
+		err(EXIT_FAILURE, "Theres an error with the child");
+	case 0:
+		execv(cmd->path, cmd->argumentos);
+		exit(0);
+	default:
+		int status;
+
+		wait(&status);
+
+		printf("Command executed\n");
+	}
+}
+
+
+void
+execute_pipe(Commands *cmds)
+{
+	int pipes[cmds->numCommands - 1][2], child;
+
+	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+
+		//CREAMOS LOS PIPES
+		if (numCommand < cmds->numCommands - 1) {
+			if (pipe(pipes[numCommand]) == -1) {
+				err(EXIT_FAILURE,
+				    "Theres an error creating the first pipe.");
+			}
+		}
+
+		switch (child = fork()) {	// ---------- HIJO  ----------------
+		case -1:
+			err(EXIT_FAILURE,
+			    "Theres an error with the child proccess");
+		case 0:
+			if (numCommand > 0) {	//SI NO ES EL PRIMER COMANDO, LA ENTRADA LA TIENE QUE LEER DEL COMANDO ANTERIOR
+				dup2(pipes[numCommand - 1][0], STDIN_FILENO);	//Si no es el pirmer comando, deberá leer la entrada de la salida del anterior.
+				close(pipes[numCommand - 1][0]);	//Como en dup2 ya se ha hecho el duplicado, podemos cerrar el pipe
+				close(pipes[numCommand - 1][1]);	//Del pipe que lo precede, solo queremos leer la entrada, por lo tanto cerramos la escritura
+
+			}
+			if (numCommand < NUM_PARAMS - 1) {	//SI NO ES EL ULTIMO COMANDO, LA SALIDA DEBE SER ENVIADA AL SIGUIENTE COMANDO
+				close(pipes[numCommand][0]);	// COMO QUEREMOS ESCRIBIR EN EL PIPE QUE LO UNE CON EL SIG COMANDO, PODEMOS CERRAR EL EXTREMO DE LECTURA
+				dup2(pipes[numCommand][1], STDOUT_FILENO);	//REDIRIGIMOS LA SALIDA AL PIPE QUE LO UNE CON EL SIG COMANDO
+				close(pipes[numCommand][1]);	// COMO YA HEMOS HECHO EL DUPLICADO CON DUP2, LO PODEMOS BORRAR
+			}
+			// EJECUTAMOS EL COMANDO Y LO MANEJAMOS EN CASO DE ERROR
+			execv(cmds->comandos[numCommand]->path,
+			      cmds->comandos[numCommand]->argumentos);
+			printf("There's an error executing the comand %s. \n",
+			       cmds->comandos[numCommand]->nombre);
+			exit(EXIT_FAILURE);
+		default:
+			// UNA VEZ QUE SE EJECUTE EL COMANDO, EL PADRE CERRARÁ LO QUE YA NO SE VA A VOLVER A USAR
+			if (numCommand < cmds->numCommands - 1) {
+				close(pipes[numCommand][1]);	// Cierra el extremo de escritura del pipe actual
+			}
+
+		}
+	}
+
+	// Código del padre que espera a todos los hijos
+	for (int i = 0; i < cmds->numCommands; i++) {
+		int status;
+
+		wait(&status);
+
+		
+	}
+
+	printf("pipe ejecutado. \n");
+
+}
+
+
+void
+exec_cmds(Commands *cmds) 
+{
+	if (cmds->numCommands > 1) {
+		// HAY UN PIPE
+		execute_pipe(cmds);
+	} 
+	else {
+		// ES UN COMANDO INDIVIDUAL
+		exec_cmd(cmds->comandos[0]);
+	}
+}
+
+
+// ----------------------- FIN LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
 
 
 // ----------------------- FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
@@ -393,8 +507,6 @@ commands_printer(Commands *cmds) {
 }
 
 
-
-
 int
 main(int argc, char *argv[])
 {
@@ -411,6 +523,7 @@ main(int argc, char *argv[])
 	
 	search_paths(&Comandos);
 	commands_printer(&Comandos);
+	exec_cmds(&Comandos);
 	free_mem(&Comandos);
 	
 	exit(status);

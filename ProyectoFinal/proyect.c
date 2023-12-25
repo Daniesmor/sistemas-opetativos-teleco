@@ -33,6 +33,8 @@ struct Command {
 	char *path;
 	int numArgumentos;	// Contador para llevar el seguimiento de la cantidad de argumentos
 	char **argumentos;
+	char *entrada;
+	char *salida;
 };
 
 typedef struct Command Command;
@@ -85,6 +87,8 @@ initializerCommand(Command *cmd)
 	cmd->argumentos = NULL;
 	cmd->numArgumentos = 0;
 	cmd->path = NULL;
+	cmd->entrada = NULL;
+	cmd->salida = NULL;
 
 }
 
@@ -184,6 +188,9 @@ tokenizator(char *line, Commands *cmds)
 		}
 
 		if (token != NULL) {
+
+
+			//LOGICA PARA DETECTAR PIPES
 			if (strcmp(token, "|") == 0) { //strcmp() compara el contenido de las cadenas token y "|". Si son iguales, devuelve cero; de lo contrario, devuelve un valor distinto de cero.
 				setLastArgumentNull(cmds->comandos[cmds->numCommands]);
 				cmds->numCommands++;
@@ -198,14 +205,36 @@ tokenizator(char *line, Commands *cmds)
 				assignCommandName(cmds->comandos[cmds->numCommands], token);
 			}
 
-			if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
-				// Manejar el error de asignación de memoria
-				memLocateFailed();
-				return;
-			}
+			// LOGICA PARA SALIDA
+			
+			if (strcmp(token, ">") == 0) { //SI DETECTAMOS REDIRECCION HACEMOS LECTURA CONTROLADA
+
+				char *file_name = strtok_r(NULL, " ", &saveptr);
 				
-			cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
-			cmds->comandos[cmds->numCommands]->numArgumentos++;
+				//int fd_out= open(file_name, O_CREAT | O_WRONLY | O_TRUNC, 0666);
+				//printf("%d\n", fd_out);
+				cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
+				
+				token = strtok_r(NULL, " ", &saveptr);
+			} else if (strcmp(token, "<") == 0) {
+				char *file_name = strtok_r(NULL, " ", &saveptr);
+				
+				//int fd_out= open(file_name, O_CREAT | O_WRONLY | O_TRUNC, 0666);
+				//printf("%d\n", fd_out);
+				cmds->comandos[cmds->numCommands]->entrada = strdup(file_name);
+			}
+			else {
+				if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+					// Manejar el error de asignación de memoria
+					memLocateFailed();
+					return;
+				}
+
+								
+				cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
+				cmds->comandos[cmds->numCommands]->numArgumentos++;
+			}
+
 
 		}
 	}
@@ -360,6 +389,33 @@ search_paths(Commands *cmds) {
 
 // ----------------------- FIN DE FUNCIONES DEDICADAS A LA BUSCADA DE EJECUTABLES EN DIFERENTES PATHS -------------------------------------------------
 
+// ----------------------- LOGICA PARA REDIRECCIONES --------------------------------------------------------------------------------------
+
+void
+fd_setter(Command *cmd, int* fd_in, int* fd_out) 
+{
+
+	if (cmd->entrada != NULL) {
+		*fd_in= open(cmd->entrada, O_CREAT | O_WRONLY | O_TRUNC, 0666);
+		dup2(*fd_in, STDOUT_FILENO);
+	} else {
+		*fd_in = 0;
+	}
+				
+	if (cmd->salida != NULL) {
+		*fd_out= open(cmd->salida, O_CREAT | O_WRONLY | O_TRUNC, 0666);
+		dup2(*fd_out, STDOUT_FILENO);
+	} else {
+		*fd_out = 1;
+	}
+
+}
+
+
+
+// ------------------------ FIN DE LOGICA PARA REDIRECCIONES -------------------------------------
+
+
 // ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
 
 void
@@ -371,7 +427,12 @@ exec_cmd(Command *cmd)
 	case -1:
 		err(EXIT_FAILURE, "Theres an error with the child");
 	case 0:
+		// SETEAMOS LOS DESCRIPTORES DE FICHERO DE LA ENTRADA Y SALIDA
+		int fd_in, fd_out;
+		fd_setter(cmd, &fd_in, &fd_out);
+
 		execv(cmd->path, cmd->argumentos);
+		
 		exit(0);
 	default:
 		int status;
@@ -386,7 +447,14 @@ exec_cmd(Command *cmd)
 void
 execute_pipe(Commands *cmds)
 {
-	int pipes[cmds->numCommands - 1][2], child;
+	
+	int child;
+
+	int** pipes = malloc((cmds->numCommands - 1)*sizeof(int*));
+
+	for (int pipe = 0; pipe < cmds->numCommands-1; pipe++) {
+		pipes[pipe] = malloc(2*sizeof(int));
+	}
 
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
 
@@ -398,20 +466,28 @@ execute_pipe(Commands *cmds)
 			}
 		}
 
+		// LOGICA DE PIPES
+
 		switch (child = fork()) {	// ---------- HIJO  ----------------
 		case -1:
 			err(EXIT_FAILURE,
 			    "Theres an error with the child proccess");
 		case 0:
+
+			// redigirigmos la salida
+			// DEFINIMOS LA ENTRADA Y SALIDA ESTANDAR
+			int fd_in, fd_out;
+			fd_setter(cmds->comandos[numCommand], &fd_in, &fd_out);
+
+
 			if (numCommand > 0) {	//SI NO ES EL PRIMER COMANDO, LA ENTRADA LA TIENE QUE LEER DEL COMANDO ANTERIOR
-				dup2(pipes[numCommand - 1][0], STDIN_FILENO);	//Si no es el pirmer comando, deberá leer la entrada de la salida del anterior.
+				dup2(pipes[numCommand - 1][0], fd_in);	//Si no es el pirmer comando, deberá leer la entrada de la salida del anterior.
 				close(pipes[numCommand - 1][0]);	//Como en dup2 ya se ha hecho el duplicado, podemos cerrar el pipe
 				close(pipes[numCommand - 1][1]);	//Del pipe que lo precede, solo queremos leer la entrada, por lo tanto cerramos la escritura
-
 			}
-			if (numCommand < NUM_PARAMS - 1) {	//SI NO ES EL ULTIMO COMANDO, LA SALIDA DEBE SER ENVIADA AL SIGUIENTE COMANDO
+			if (numCommand < cmds->numCommands  - 1) {	//SI NO ES EL ULTIMO COMANDO, LA SALIDA DEBE SER ENVIADA AL SIGUIENTE COMANDO
 				close(pipes[numCommand][0]);	// COMO QUEREMOS ESCRIBIR EN EL PIPE QUE LO UNE CON EL SIG COMANDO, PODEMOS CERRAR EL EXTREMO DE LECTURA
-				dup2(pipes[numCommand][1], STDOUT_FILENO);	//REDIRIGIMOS LA SALIDA AL PIPE QUE LO UNE CON EL SIG COMANDO
+				dup2(pipes[numCommand][1], fd_out);	//REDIRIGIMOS LA SALIDA AL PIPE QUE LO UNE CON EL SIG COMANDO
 				close(pipes[numCommand][1]);	// COMO YA HEMOS HECHO EL DUPLICADO CON DUP2, LO PODEMOS BORRAR
 			}
 			// EJECUTAMOS EL COMANDO Y LO MANEJAMOS EN CASO DE ERROR
@@ -426,19 +502,15 @@ execute_pipe(Commands *cmds)
 				close(pipes[numCommand][1]);	// Cierra el extremo de escritura del pipe actual
 			}
 
+			printf("Pipe executed\n");
 		}
 	}
 
 	// Código del padre que espera a todos los hijos
 	for (int i = 0; i < cmds->numCommands; i++) {
 		int status;
-
-		wait(&status);
-
-		
+		wait(&status);	
 	}
-
-	printf("pipe ejecutado. \n");
 
 }
 
@@ -467,6 +539,14 @@ free_command(Commands *cmds)
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
 		free(cmds->comandos[numCommand]->nombre);
 		free(cmds->comandos[numCommand]->path);
+
+		if (cmds->comandos[numCommand]->salida != NULL) {
+			free(cmds->comandos[numCommand]->salida);
+		}
+
+		if (cmds->comandos[numCommand]->entrada != NULL) {
+			free(cmds->comandos[numCommand]->entrada);
+		}
 		for (int i = 0; i < cmds->comandos[numCommand]->numArgumentos; i++) {
 			free(cmds->comandos[numCommand]->argumentos[i]);
 		}
@@ -499,6 +579,8 @@ commands_printer(Commands *cmds) {
 		printf("----COMANDO %d ------\n", numCommand);
 		printf("Comando: %s \n",cmds->comandos[numCommand]->nombre);
 		printf("Path: %s \n",cmds->comandos[numCommand]->path);
+		printf("Entrada: %s \n",cmds->comandos[numCommand]->entrada);
+		printf("Salida: %s \n",cmds->comandos[numCommand]->salida);
 		for(int numArg=0; numArg < cmds->comandos[numCommand]->numArgumentos; numArg++) {
 			printf("Argumento %d: %s \n",numArg,cmds->comandos[numCommand]->argumentos[numArg]);
 		}
@@ -523,6 +605,7 @@ main(int argc, char *argv[])
 	
 	search_paths(&Comandos);
 	commands_printer(&Comandos);
+	printf("------------------------------- EJECUCION --------------------------- \n");
 	exec_cmds(&Comandos);
 	free_mem(&Comandos);
 	

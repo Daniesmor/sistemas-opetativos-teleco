@@ -173,14 +173,13 @@ tokenizator(char *line, Commands *cmds)
 
 		return;
 	}
-
-
 		
 	token = strtok_r(line, " ", &saveptr); //Token es una dir de memoria
     assignCommandName(cmds->comandos[cmds->numCommands], token);
-		
+	//token = strtok_r(NULL, " ", &saveptr);
 		//cmds->numCommands++;
-		
+	printf("ultimo token antes de while %s \n", token);	
+	
 	while (token != NULL) {
 
 		if (cmds->comandos[cmds->numCommands]->numArgumentos != 0) {
@@ -188,58 +187,45 @@ tokenizator(char *line, Commands *cmds)
 		}
 
 		if (token != NULL) {
+ 			//LOGICA PARA DETECTAR PIPES
+            if (strcmp(token, "|") == 0) {
+                setLastArgumentNull(cmds->comandos[cmds->numCommands]);
+                cmds->numCommands++;
 
+                if (reserve_commands(cmds) == NULL) {
+                    // Manejar el error de asignación de memoria
+                    memLocateFailed();
+                    return;
+                }
 
-			//LOGICA PARA DETECTAR PIPES
-			if (strcmp(token, "|") == 0) { //strcmp() compara el contenido de las cadenas token y "|". Si son iguales, devuelve cero; de lo contrario, devuelve un valor distinto de cero.
-				setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-				cmds->numCommands++;
+                token = strtok_r(NULL, " ", &saveptr);
+                assignCommandName(cmds->comandos[cmds->numCommands], token);
+            } else if (strcmp(token, ">") == 0) {
+                // Redirección de salida
+                char *file_name = strtok_r(NULL, " ", &saveptr);
+                cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
+                //token = strtok_r(NULL, " ", &saveptr);
+            } else if (strcmp(token, "<") == 0) {
+				printf("llegamos \n");
+                // Redirección de entrada
+                char *file_name = strtok_r(NULL, " ", &saveptr);
+                cmds->comandos[0]->entrada = strdup(file_name);
+                //token = strtok_r(NULL, " ", &saveptr);
+            } else {
+                if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+                    // Manejar el error de asignación de memoria
+                    memLocateFailed();
+                    return;
+                }
 
-				if (reserve_commands(cmds) == NULL) {
-					// Manejar el error de asignación de memoria
-					memLocateFailed();
-					return;
-				}
-
-				token = strtok_r(NULL, " ", &saveptr);
-				assignCommandName(cmds->comandos[cmds->numCommands], token);
-			}
-
-			// LOGICA PARA SALIDA
-			
-			if (strcmp(token, ">") == 0) { //SI DETECTAMOS REDIRECCION HACEMOS LECTURA CONTROLADA
-
-				char *file_name = strtok_r(NULL, " ", &saveptr);
-				
-				//int fd_out= open(file_name, O_CREAT | O_WRONLY | O_TRUNC, 0666);
-				//printf("%d\n", fd_out);
-				cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
-				
-				token = strtok_r(NULL, " ", &saveptr);
-			} else if (strcmp(token, "<") == 0) {
-				char *file_name = strtok_r(NULL, " ", &saveptr);
-				
-				//int fd_out= open(file_name, O_CREAT | O_WRONLY | O_TRUNC, 0666);
-				//printf("%d\n", fd_out);
-				cmds->comandos[cmds->numCommands]->entrada = strdup(file_name);
-			}
-			else {
-				if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
-					// Manejar el error de asignación de memoria
-					memLocateFailed();
-					return;
-				}
-
-								
-				cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
-				cmds->comandos[cmds->numCommands]->numArgumentos++;
-			}
-
-
-		}
-	}
-	setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-	cmds->numCommands++;
+                cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
+                cmds->comandos[cmds->numCommands]->numArgumentos++;
+                //token = strtok_r(NULL, " ", &saveptr);
+            }
+        }
+    }
+    setLastArgumentNull(cmds->comandos[cmds->numCommands]);
+    cmds->numCommands++;
 }
 
 
@@ -392,21 +378,23 @@ search_paths(Commands *cmds) {
 // ----------------------- LOGICA PARA REDIRECCIONES --------------------------------------------------------------------------------------
 
 void
-fd_setter(Command *cmd, int* fd_in, int* fd_out) 
+fd_setter(Command *cmd, int* fd_in, int* fd_out) // ESTA FUNCION REALIZA LAS REDIRECCIONES EN CASO DE QUE HALLA
 {
 
 	if (cmd->entrada != NULL) {
-		*fd_in= open(cmd->entrada, O_CREAT | O_WRONLY | O_TRUNC, 0666);
-		dup2(*fd_in, STDOUT_FILENO);
+		printf("Se ha cambiado la entrada \n");
+		*fd_in= open(cmd->entrada, O_RDONLY);
+		dup2(*fd_in, STDIN_FILENO);
 	} else {
-		*fd_in = 0;
+		*fd_in = STDIN_FILENO;
 	}
 				
 	if (cmd->salida != NULL) {
+		printf("Se ha cambiado la salida \n");
 		*fd_out= open(cmd->salida, O_CREAT | O_WRONLY | O_TRUNC, 0666);
 		dup2(*fd_out, STDOUT_FILENO);
 	} else {
-		*fd_out = 1;
+		*fd_out = STDOUT_FILENO;
 	}
 
 }
@@ -417,31 +405,6 @@ fd_setter(Command *cmd, int* fd_in, int* fd_out)
 
 
 // ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
-
-void
-exec_cmd(Command *cmd)
-{
-	int child;
-
-	switch (child = fork()) {
-	case -1:
-		err(EXIT_FAILURE, "Theres an error with the child");
-	case 0:
-		// SETEAMOS LOS DESCRIPTORES DE FICHERO DE LA ENTRADA Y SALIDA
-		int fd_in, fd_out;
-		fd_setter(cmd, &fd_in, &fd_out);
-
-		execv(cmd->path, cmd->argumentos);
-		
-		exit(0);
-	default:
-		int status;
-
-		wait(&status);
-
-		printf("Command executed\n");
-	}
-}
 
 
 void
@@ -478,14 +441,15 @@ execute_pipe(Commands *cmds)
 			// DEFINIMOS LA ENTRADA Y SALIDA ESTANDAR
 			int fd_in, fd_out;
 			fd_setter(cmds->comandos[numCommand], &fd_in, &fd_out);
-
+			//printf("Soy el comando %d y estoy leyendo de %d \n", numCommand, fd_in);
+			//printf("Soy el comando %d y mi salida es %d \n", numCommand, fd_out);
 
 			if (numCommand > 0) {	//SI NO ES EL PRIMER COMANDO, LA ENTRADA LA TIENE QUE LEER DEL COMANDO ANTERIOR
 				dup2(pipes[numCommand - 1][0], fd_in);	//Si no es el pirmer comando, deberá leer la entrada de la salida del anterior.
 				close(pipes[numCommand - 1][0]);	//Como en dup2 ya se ha hecho el duplicado, podemos cerrar el pipe
 				close(pipes[numCommand - 1][1]);	//Del pipe que lo precede, solo queremos leer la entrada, por lo tanto cerramos la escritura
 			}
-			if (numCommand < cmds->numCommands  - 1) {	//SI NO ES EL ULTIMO COMANDO, LA SALIDA DEBE SER ENVIADA AL SIGUIENTE COMANDO
+			if (numCommand < cmds->numCommands - 1) {	//SI NO ES EL ULTIMO COMANDO, LA SALIDA DEBE SER ENVIADA AL SIGUIENTE COMANDO
 				close(pipes[numCommand][0]);	// COMO QUEREMOS ESCRIBIR EN EL PIPE QUE LO UNE CON EL SIG COMANDO, PODEMOS CERRAR EL EXTREMO DE LECTURA
 				dup2(pipes[numCommand][1], fd_out);	//REDIRIGIMOS LA SALIDA AL PIPE QUE LO UNE CON EL SIG COMANDO
 				close(pipes[numCommand][1]);	// COMO YA HEMOS HECHO EL DUPLICADO CON DUP2, LO PODEMOS BORRAR
@@ -502,7 +466,7 @@ execute_pipe(Commands *cmds)
 				close(pipes[numCommand][1]);	// Cierra el extremo de escritura del pipe actual
 			}
 
-			printf("Pipe executed\n");
+			
 		}
 	}
 
@@ -510,8 +474,36 @@ execute_pipe(Commands *cmds)
 	for (int i = 0; i < cmds->numCommands; i++) {
 		int status;
 		wait(&status);	
+		printf("Pipe %d executed\n", i);
 	}
 
+}
+
+
+
+void
+exec_cmd(Command *cmd)
+{
+	int child;
+
+	switch (child = fork()) {
+	case -1:
+		err(EXIT_FAILURE, "Theres an error with the child");
+	case 0:
+		// SETEAMOS LOS DESCRIPTORES DE FICHERO DE LA ENTRADA Y SALIDA
+		int fd_in, fd_out;
+		fd_setter(cmd, &fd_in, &fd_out);
+		//printf("estoy leyendo de %d \n", fd_in);
+		execv(cmd->path, cmd->argumentos);
+		
+		exit(0);
+	default:
+		int status;
+
+		wait(&status);
+
+		printf("Command executed\n");
+	}
 }
 
 
@@ -574,7 +566,7 @@ free_mem(Commands *cmds)
 
 void 
 commands_printer(Commands *cmds) {
-
+	printf("Contador de comandos: %d \n", cmds->numCommands);
 	for (int numCommand=0; numCommand <cmds->numCommands; numCommand++) {
 		printf("----COMANDO %d ------\n", numCommand);
 		printf("Comando: %s \n",cmds->comandos[numCommand]->nombre);

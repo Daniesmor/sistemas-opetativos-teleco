@@ -21,6 +21,7 @@ enum {
 
 const char *builtin_cmds[] = {
 	"cd",
+	"=",
 	"ifok", 
 	"ifnot",
 };
@@ -157,6 +158,66 @@ setLastArgumentNull(Command *cmd)
 
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMANDS -----------------------------------------------------------------------------
 
+// ------------------------------ ASIGNACION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
+
+void
+variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
+{
+	char *vars;
+	char *saveptr;
+
+	// ASIGNAMOS EL NOMBRE DEL COMANDO COMO "=", PARA PODER COTEJARLO CON LOS BUILTS-IN (lista)
+	assignCommandName(cmds->comandos[cmds->numCommands], "=");
+	vars = strtok_r(token, "=", &saveptr); //Token es una dir de memoria
+	if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+                    // Manejar el error de asignación de memoria
+            memLocateFailed();
+            return;
+    }
+
+	// GUARDAMOS EL VALOR DE LA VARIABLE QUE QUEREMOS CREAR COMO ARGUMENTO 0
+    cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(vars); 
+    cmds->comandos[cmds->numCommands]->numArgumentos++;
+
+	vars = strtok_r(NULL, " ", &saveptr); //vars es una dir de memoria
+	if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+        // Manejar el error de asignación de memoria
+        memLocateFailed();
+        return;
+    }
+
+	// GUARDAMOS EL VALOR QUE LE VAMOS A DAR A LA VARIABLE QUE QUEREMOS CREAR COMO ARGUMENTO 1
+    cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(vars);
+	cmds->comandos[cmds->numCommands]->numArgumentos++;
+}
+
+void
+variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
+{
+	char *vars;
+	char *saveptro;
+
+	vars = strtok_r(token, "$", &saveptro);
+
+	char* variable = getenv(vars);
+
+	if (variable == NULL) {
+		printf("error: var %s does not exist. \n", vars);
+	} else
+	{
+		if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+			// Manejar el error de asignación de memoria
+			memLocateFailed();
+			return;
+		}
+
+		cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(variable);
+		cmds->comandos[cmds->numCommands]->numArgumentos++;
+	}
+}
+
+
+// ------------------------------ FIN ASIGNACION DE VARIABLES DE ENTORNO ---------------------------------------------------------------------------
 
 
 // ----------------------- FUNCIONES PARA TOKENIZAR ENTRADA Y SETEAR COMANDOS Y SUS RESPECTIVOS ARGUMENTOS ----------------------------------------------------------------------------------
@@ -213,9 +274,18 @@ tokenizator(char *line, Commands *cmds)
                 char *file_name = strtok_r(NULL, " ", &saveptr);
                 cmds->comandos[0]->entrada = strdup(file_name);
                 //token = strtok_r(NULL, " ", &saveptr);
+			} else if (strchr(token, '$') != NULL) {
+				variable_sustitution(cmds, token);
+
 			} else if (strcmp(token, "&") == 0) {
 				cmds->background = 1;
-            } else {
+            } else if (strchr(token, '=') != NULL) {
+				printf("parece que hay una sust \n");
+				variable_asig(cmds, token);
+
+				
+			}
+			else {
                 if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
                     // Manejar el error de asignación de memoria
                     memLocateFailed();
@@ -440,6 +510,23 @@ exec_cd(Command *cmd) {
 	}
 }
 
+void 
+exec_asig(Command *cmd) {
+	printf("Queremos darle a %s el valor %s \n", cmd->argumentos[0], cmd->argumentos[1]);
+
+	if (setenv(cmd->argumentos[0], cmd->argumentos[1],1) != 0) { //EL 1 ES APRA SOBREESCRIBIR LA VARIABLE EN CASO DE QUE YA EXISTA
+        err(EXIT_FAILURE, "Error to establish environment variable");
+    }
+
+	// Acceder al valor de la variable de entorno
+    char *env_value = getenv(cmd->argumentos[0]);
+    if (env_value != NULL) {
+        printf("Valor de MY_VARIABLE: %s\n", env_value);
+    } else {
+        printf("MY_VARIABLE no está definida\n");
+    }
+
+}
 
 
 // --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
@@ -560,7 +647,10 @@ exec_builtin(Command *cmd) {
 	if (strcmp(cmd->nombre, "cd") == 0) { 
 		//COMPROBAMOS SI HAY ALGUN PATH COMO ARGUMENTO
 		exec_cd(cmd);
-
+	}
+	if (strcmp(cmd->nombre, "=") == 0) { 
+		//COMPROBAMOS SI HAY ALGUN PATH COMO ARGUMENTO
+		exec_asig(cmd);
 	}
 }
 
@@ -656,7 +746,7 @@ main(int argc, char *argv[])
         err(EXIT_FAILURE, "No arguments needed.");
     }
 
-
+	
 	do {
 		if (Comandos.background == 1) {
 			printf("Limpiando comandos \n");
@@ -670,8 +760,8 @@ main(int argc, char *argv[])
         commands_printer(&Comandos);
         printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
         exec_cmds(&Comandos);
-		
-	} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
+	} while (1);	
+	//} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
         //free_command(&Comandos);
         //free_command(&Comandos);
 	printf("\n");

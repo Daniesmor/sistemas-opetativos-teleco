@@ -192,7 +192,7 @@ variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO C
 }
 
 void
-variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
+variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION.
 {
 	char *vars;
 	char *saveptro;
@@ -202,7 +202,7 @@ variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE CO
 	char* variable = getenv(vars);
 
 	if (variable == NULL) {
-		printf("error: var %s does not exist. \n", vars);
+		printf("error: var %s does not exist. \n", vars); 
 	} else
 	{
 		if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {

@@ -20,8 +20,9 @@ enum {
 };
 
 const char *builtin_cmds[] = {
+	"cd",
 	"ifok", 
-	"ifnot", 
+	"ifnot",
 };
 
 // ----------------------- FIN DE PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
@@ -44,6 +45,7 @@ struct Commands {
 
     int numCommands;
     Command **comandos;
+	int background;
 
 };
 
@@ -120,6 +122,7 @@ initializerCommands(char *argv[], Commands *cmds)
 	
 	cmds->numCommands = 0;
 	cmds->comandos = NULL;
+	cmds->background = 0;
 
 }
 
@@ -178,7 +181,7 @@ tokenizator(char *line, Commands *cmds)
     assignCommandName(cmds->comandos[cmds->numCommands], token);
 	//token = strtok_r(NULL, " ", &saveptr);
 		//cmds->numCommands++;
-	printf("ultimo token antes de while %s \n", token);	
+	
 	
 	while (token != NULL) {
 
@@ -206,11 +209,12 @@ tokenizator(char *line, Commands *cmds)
                 cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
                 //token = strtok_r(NULL, " ", &saveptr);
             } else if (strcmp(token, "<") == 0) {
-				printf("llegamos \n");
                 // Redirección de entrada
                 char *file_name = strtok_r(NULL, " ", &saveptr);
                 cmds->comandos[0]->entrada = strdup(file_name);
                 //token = strtok_r(NULL, " ", &saveptr);
+			} else if (strcmp(token, "&") == 0) {
+				cmds->background = 1;
             } else {
                 if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
                     // Manejar el error de asignación de memoria
@@ -243,28 +247,46 @@ clean_line(char *line)
 }
 
 void
-read_lines(int *status, Commands *cmds)
+read_lines(Commands *cmds)
 {
 
 	char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
 
 	malloc_check(line);
 
-	while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
+	printf("background %d\n", cmds->background);
 
-		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
-		line = clean_line(line);	//Limpiamos line porque alfinal tiene un '\n'
-		//printf("The line: %s \n", line);
-        tokenizator(line, cmds);
-		//create_files(line, status);
+	//if (cmds->background == 0) {
 
-	}
+	fgets(line, LINE_BUFFER_SIZE, stdin);
+	
 
-	if (!feof(stdin)) {
+	line = clean_line(line);
+	tokenizator(line, cmds);
+	
+	
+
+	/*}
+	else {
+		while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
+
+			// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
+			line = clean_line(line);	//Limpiamos line porque alfinal tiene un '\n'
+				//printf("The line: %s \n", line);
+			tokenizator(line, cmds);
+				//create_files(line, status);
+
+		}
+
+		if (!feof(stdin)) {
 		// Llegamos al final de la entrada estándar
 		errx(EXIT_FAILURE, "eof not reached");
-
+		}
 	}
+	*/
+	
+
+
 
 	free(line);
 
@@ -276,7 +298,7 @@ read_lines(int *status, Commands *cmds)
 void
 searchin_paths(Command *cmd) 
 {
-	printf("-----> Buscamos en $PATHS \n");
+	//printf("-----> Buscamos en $PATHS \n");
 	
 	char *sh_paths = getenv("PATH"); //ESTO NOS DEVUELVE LA LISTA DE LA VAR. PATHS DE LA SHELL, SEPARADOS POR ":", POR LO QUE HAY QUE TOKENIZARLA
 		
@@ -296,7 +318,7 @@ searchin_paths(Command *cmd)
 		strcpy(current_dir, token);
 		strcat(current_dir, "/");
 		strcat(current_dir, cmd->nombre);
-		printf("Se esta buscando en: %s \n", current_dir);
+		//printf("Se esta buscando en: %s \n", current_dir);
 
 		//BUSCAMOS EL EXEC, Y NOS QUEDAREMOS CON EL ULTIMO PATH DONDE SE HALLA ENCONTRADO SI ES QUE SE HA ENCONTRADO EN VARIOS
 		
@@ -305,7 +327,7 @@ searchin_paths(Command *cmd)
                 free(cmd->path);
             }
 			cmd->path = strdup(current_dir);
-			printf("Se ha encontrado en: %s \n", cmd->path);
+			//printf("Se ha encontrado en: %s \n", cmd->path);
 		}
 		free(current_dir);		
 		token = strtok_r(NULL, ":", &saveptr);
@@ -319,9 +341,9 @@ void
 searchin_pwd(Command *cmd) 
 {
 	
-	printf("-----> Buscamos %s en el working directory \n", cmd->nombre);	
+	//printf("-----> Buscamos %s en el working directory \n", cmd->nombre);	
 	if (access(cmd->nombre, F_OK) == 0) {
-		printf("El comando %s se ha encontrado en working directory \n", cmd->nombre);
+		//printf("El comando %s se ha encontrado en working directory \n", cmd->nombre);
 		char *actual_dir = strcat(getcwd(NULL, 0), "/"); //DE ESTA MANERA GETCWD, UTILIZA UN BUFFER DE MEMORIA DINAMICO PARA LA RUTA DEL PATH PWD
 		//char *full_path = strcat(actual_dir,"/");
 		char *full_path = strcat(actual_dir,cmd->nombre);
@@ -332,7 +354,7 @@ searchin_pwd(Command *cmd)
 		free(full_path);
 	}
 	else {
-		printf("El comando %s NO se ha encontrado en working directory \n", cmd->nombre);
+		//printf("El comando %s NO se ha encontrado en working directory \n", cmd->nombre);
 		// No lo hemos encontrado en el dir actual, asi que lo buscamos en la lista de paths
 		searchin_paths(cmd);			
 	}
@@ -340,7 +362,7 @@ searchin_pwd(Command *cmd)
 }
 
 int 
-is_builtin(Command *cmd) {
+is_builtin(Command *cmd) { // Si es un built-in devuelve la 1
 	int found = 0;
 
 	for (int i = 0; builtin_cmds[i] != NULL; i++) {
@@ -402,6 +424,25 @@ fd_setter(Command *cmd, int* fd_in, int* fd_out) // ESTA FUNCION REALIZA LAS RED
 
 
 // ------------------------ FIN DE LOGICA PARA REDIRECCIONES -------------------------------------
+
+// ------------------------- COMANDOS BUILT-INS -------------------------------------------------------------------------------------------
+
+
+void 
+exec_cd(Command *cmd) {
+	if (cmd->numArgumentos > 1) {
+			// SI HAY MAS DE UN ARGUMENTO SIGNIFICA QUE HAY UN PATH, args: (cd, path)		
+			chdir(cmd->argumentos[1]);
+	} else {
+		// NO NOS HAN DADO UN PATH ASI QUE TENENOS QUE IR A HOME
+		char *sh_home = getenv("HOME");
+		chdir(sh_home);
+	}
+}
+
+
+
+// --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
 
 
 // ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
@@ -470,19 +511,23 @@ execute_pipe(Commands *cmds)
 		}
 	}
 
-	// Código del padre que espera a todos los hijos
-	for (int i = 0; i < cmds->numCommands; i++) {
-		int status;
-		wait(&status);	
-		printf("Pipe %d executed\n", i);
+
+	if (cmds->background == 0) {
+		// Código del padre que espera a todos los hijos
+		for (int i = 0; i < cmds->numCommands; i++) {
+			int status;
+			wait(&status);	
+			printf("Pipe %d executed\n", i);
+		}
 	}
 
+	printf("Pipe executing in background\n");
 }
 
 
 
 void
-exec_cmd(Command *cmd)
+exec_cmd(Command *cmd, int background)
 {
 	int child;
 
@@ -498,11 +543,24 @@ exec_cmd(Command *cmd)
 		
 		exit(0);
 	default:
-		int status;
+		if (background == 0) {
+			int status;
+			wait(&status);
+			printf("Command executed\n");
+		}
 
-		wait(&status);
+		printf("Command executing in background\n");
+		
+	}
+}
 
-		printf("Command executed\n");
+void
+exec_builtin(Command *cmd) {
+// COMPROBAMOS CON QUE BUILT-IN SE CORRESPONDE 
+	if (strcmp(cmd->nombre, "cd") == 0) { 
+		//COMPROBAMOS SI HAY ALGUN PATH COMO ARGUMENTO
+		exec_cd(cmd);
+
 	}
 }
 
@@ -515,9 +573,15 @@ exec_cmds(Commands *cmds)
 		execute_pipe(cmds);
 	} 
 	else {
-		// ES UN COMANDO INDIVIDUAL
-		exec_cmd(cmds->comandos[0]);
+		// COMPROBAMOS SI ES UN COMANDO BUILT_IN
+		if (is_builtin(cmds->comandos[0]) == 1) {
+			exec_builtin(cmds->comandos[0]);
+		} else {
+			exec_cmd(cmds->comandos[0], cmds->background);
+		}
+		
 	}
+
 }
 
 
@@ -585,23 +649,35 @@ int
 main(int argc, char *argv[])
 {
 	int status = 0;
-    //Command *Commands[NUM_PARAMS];
-	Commands Comandos;
-    initializerCommands(argv, &Comandos);
+    Commands Comandos;
+    
 
-	if (argc > 1) {
-		err(EXIT_FAILURE, "No arguments needed.");
-	}
+    if (argc > 1) {
+        err(EXIT_FAILURE, "No arguments needed.");
+    }
 
-	read_lines(&status, &Comandos);
-	
-	search_paths(&Comandos);
-	commands_printer(&Comandos);
-	printf("------------------------------- EJECUCION --------------------------- \n");
-	exec_cmds(&Comandos);
-	free_mem(&Comandos);
-	
-	exit(status);
-	return 0;
+
+	do {
+		if (Comandos.background == 1) {
+			printf("Limpiando comandos \n");
+			free_command(&Comandos);
+		}
+		
+		initializerCommands(argv, &Comandos);
+		//Comandos.background = 0;
+		read_lines(&Comandos);
+        search_paths(&Comandos);
+        commands_printer(&Comandos);
+        printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
+        exec_cmds(&Comandos);
+		
+	} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
+        //free_command(&Comandos);
+        //free_command(&Comandos);
+	printf("\n");
+
+    free_commands(&Comandos);
+    exit(status);
+    return 0;
 
 }

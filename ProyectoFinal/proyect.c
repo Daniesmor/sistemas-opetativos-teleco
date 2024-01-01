@@ -6,6 +6,7 @@
 #include <err.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <signal.h>
 
 // ----------------------- PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
@@ -621,6 +622,29 @@ exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
 
 // --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
 
+// ------------------------ LOGICA PARA SEÑALES -----------------------------------------------------------------------------------------
+
+void
+sigchld_handler() 
+{
+	int status;
+    pid_t pid;
+    
+    // Espera a que cualquier proceso hijo termine
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (WIFEXITED(status)) {
+            //printf("Proceso hijo %d terminó con estado de salida: %d\n", pid, WEXITSTATUS(status));
+            // Actualizar la variable de entorno result
+            char result_value[10];
+            snprintf(result_value, sizeof(result_value), "%d", WEXITSTATUS(status));
+            setenv("result", result_value, 1);
+        }
+    }
+
+}
+
+// ----------------------- FIN DE LOGICA PARA SEÑALES -------------------------------------------------------------------------------------
+
 
 // ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
 
@@ -660,6 +684,12 @@ execute_pipe(Commands *cmds)
 				    "Theres an error creating the first pipe.");
 			}
 		}
+
+		// .......................... ENV VAR "result" EN CASO DE QUE & ..............................
+		signal(SIGCHLD, sigchld_handler); // Esta función haá que se envíe en una señal cuando un proceso hijo termine
+										// De esta forma no necesitamos hacer wait->wexistatus para saber como terminó.
+		// .................................................................................................
+
 
 		// LOGICA DE PIPES
 
@@ -774,6 +804,15 @@ exec_cmd(Command *cmd, int background)
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	// .......................... ENV VAR "result" EN CASO DE QUE & ..............................
+
+	signal(SIGCHLD, sigchld_handler); // Esta función haá que se envíe en una señal cuando un proceso hijo termine
+									// De esta forma no necesitamos hacer wait->wexistatus para saber como terminó.
+
+	
+
+	// .................................................................................................
 
 	
 

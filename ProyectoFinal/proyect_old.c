@@ -6,6 +6,8 @@
 #include <err.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <signal.h>
+
 
 // ----------------------- PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
@@ -24,7 +26,6 @@ const char *builtin_cmds[] = {
 	"=",
 	"ifok", 
 	"ifnot",
-	"$",
 };
 
 // ----------------------- FIN DE PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
@@ -38,6 +39,7 @@ struct Command {
 	char **argumentos;
 	char *entrada;
 	char *salida;
+	char *here;
 };
 
 typedef struct Command Command;
@@ -47,7 +49,8 @@ struct Commands {
 
     int numCommands;
     Command **comandos;
-	int background;
+	int background; //& 
+	int status;
 
 };
 
@@ -57,7 +60,21 @@ typedef struct Commands Commands;
 
 // ----------------------- FIN DE ESTRUCTURAS DE DATOS UTILIZADAS --------------------------------------------------------------------------------------
 
+// ------------------------ ALGUNAS ACCIONES BÁSICAS -----------------------------------------------------------------------------------------
 
+char *
+clean_line(char *line, char character)
+{
+	for (int i = 0; (line[i] != '\0'); i++) {
+		if (line[i] == character) {
+			line[i] = '\0';
+		}
+	}
+	return line;
+}
+
+
+// ------------------------- FIN DE ALGUNAS ACCIONES BASICAS ---------------------------------------------------------------------------------
 
 // -------------------- GESTIÓN DE ERRORES DEL PROGRAMA -----------------------------------------------------------------------------------------
 
@@ -93,6 +110,7 @@ initializerCommand(Command *cmd)
 	cmd->path = NULL;
 	cmd->entrada = NULL;
 	cmd->salida = NULL;
+	cmd->here = NULL;
 
 }
 
@@ -114,6 +132,7 @@ assignCommandName(Command *cmd, char *name)
 	cmd->nombre = strdup(name);
 }
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMAND ----------------------------------------------------------------------
+
 
 
 // ---------------------------- GESTION DEL STRUCT COMMANDS ------------------------------------------------------------------------------------
@@ -193,27 +212,58 @@ variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO C
 }
 
 void
-variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
+variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION.
 {
 	char *vars;
 	char *saveptro;
 
 	vars = strtok_r(token, "$", &saveptro);
-	assignCommandName(cmds->comandos[cmds->numCommands], "$");
 
-	if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
-		// Manejar el error de asignación de memoria
-		memLocateFailed();
-		return;
+	char* variable = getenv(vars);
+
+	if (variable == NULL) {
+		printf("error: var %s does not exist. \n", vars); 
+	} else
+	{
+		if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+			// Manejar el error de asignación de memoria
+			memLocateFailed();
+			return;
+		}
+
+		cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(variable);
+		cmds->comandos[cmds->numCommands]->numArgumentos++;
 	}
-
-	cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(vars);
-	cmds->comandos[cmds->numCommands]->numArgumentos++;
-
 }
 
 
 // ------------------------------ FIN ASIGNACION DE VARIABLES DE ENTORNO ---------------------------------------------------------------------------
+
+// ------------------------------- LOGICA PARA EL OPCIONAL I (IMPLEMENTACION DE HERE{}) ------------------------------------------------------------
+
+void
+first_optional(Commands *cmds) {
+	char *linea = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+
+	malloc_check(linea);
+
+	char *here_string = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+			
+
+	do {
+		fgets(linea, LINE_BUFFER_SIZE, stdin);
+		here_string = (char *)realloc(here_string,sizeof(here_string)+ sizeof(linea));	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+		strcat(here_string, linea);
+	} while (strchr(linea, '}') == NULL); //MIENTRAS QUE NO ENCONTREMOS EL FIN DE HERE{} SEGUIMOS LEYENDO
+
+	clean_line(here_string, '}');
+	//printf("%s \n", here_string);
+	cmds->comandos[0]->here = strdup(here_string);
+	free(here_string);
+	free(linea);
+}
+
+// ------------------------------- FIN LOGICA PARA EL OPCIONAL I (IMPLEMENTACION DE HERE{}) ------------------------------------------------------------
 
 
 // ----------------------- FUNCIONES PARA TOKENIZAR ENTRADA Y SETEAR COMANDOS Y SUS RESPECTIVOS ARGUMENTOS ----------------------------------------------------------------------------------
@@ -272,24 +322,24 @@ tokenizator(char *line, Commands *cmds)
                 //token = strtok_r(NULL, " ", &saveptr);
 			} else if (strchr(token, '$') != NULL) {
 				variable_sustitution(cmds, token);
-				
 
-				token = strtok_r(NULL, " ", &saveptr);
-
+			} else if (strstr(token, "HERE{") != NULL) {
+				if (cmds->background == 0) { //SI EL COMANDO NO TIENE "&", LEERA LA ENTRADA ESTANDAR DE HERE
+					first_optional(cmds);
+				}
 			} else if (strcmp(token, "&") == 0) {
 				cmds->background = 1;
             } else if (strchr(token, '=') != NULL) {
 				printf("parece que hay una sust \n");
-				variable_asig(cmds, token);				
+				variable_asig(cmds, token);			
 			}
 			else {
-
 				if (cmds->comandos[cmds->numCommands]->nombre != NULL) {
 					if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
 						// Manejar el error de asignación de memoria
 						memLocateFailed();
 						return;
-                	}
+					}
 
 					cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
 					cmds->comandos[cmds->numCommands]->numArgumentos++;
@@ -301,26 +351,14 @@ tokenizator(char *line, Commands *cmds)
             }
         }
     }
-	if (cmds->comandos[cmds->numCommands] != NULL) {
-		setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-		cmds->numCommands++;
-	}
-
+    setLastArgumentNull(cmds->comandos[cmds->numCommands]);
+    cmds->numCommands++;
 }
 
 
 // ----------------------- FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
 
-char *
-clean_line(char *line)
-{
-	for (int i = 0; (line[i] != '\0'); i++) {
-		if (line[i] == '\n') {
-			line[i] = '\0';
-		}
-	}
-	return line;
-}
+
 
 void
 read_lines(Commands *cmds)
@@ -330,17 +368,15 @@ read_lines(Commands *cmds)
 
 	malloc_check(line);
 
+	
+
 	printf("background %d\n", cmds->background);
 
 	//if (cmds->background == 0) {
-
 	fgets(line, LINE_BUFFER_SIZE, stdin);
-	
-
-	line = clean_line(line);
+	line = clean_line(line, '\n');
 	tokenizator(line, cmds);
-	
-	
+
 
 	/*}
 	else {
@@ -495,6 +531,8 @@ fd_setter(Command *cmd, int* fd_in, int* fd_out) // ESTA FUNCION REALIZA LAS RED
 		*fd_out = STDOUT_FILENO;
 	}
 
+	
+
 }
 
 
@@ -534,25 +572,32 @@ exec_asig(Command *cmd) {
 
 }
 
-void 
-exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
-
-
-	char* variable = getenv(cmd->argumentos[0]);
-
-	if (variable == NULL) {
-		printf("error: var %s does not exist. \n", cmd->argumentos[1]);
-	} else
-	{
-		printf("%s", variable);
-		
-	}
-
-}
-
 
 // --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
 
+
+// ------------------------ LOGICA PARA SEÑALES -----------------------------------------------------------------------------------------
+
+void
+sigchld_handler() 
+{
+	int status;
+    pid_t pid;
+    
+    // Espera a que cualquier proceso hijo termine
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (WIFEXITED(status)) {
+            printf("Proceso hijo %d terminó con estado de salida: %d\n", pid, WEXITSTATUS(status));
+            // Actualizar la variable de entorno result
+            char result_value[10];
+            snprintf(result_value, sizeof(result_value), "%d", WEXITSTATUS(status));
+            setenv("result", result_value, 1);
+        }
+    }
+
+}
+
+// ----------------------- FIN DE LOGICA PARA SEÑALES -------------------------------------------------------------------------------------
 
 // ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
 
@@ -569,7 +614,21 @@ execute_pipe(Commands *cmds)
 		pipes[pipe] = malloc(2*sizeof(int));
 	}
 
+	
+
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+
+		// ....................... EN CASO DE HERE{} .........................................
+		int pipe_here[2]; //CREAMOS UN PIPE QUE SE UTILIZARÁ EN CASO DE UTILIZAR EL PROTOCOLO HERE{}
+		if (cmds->comandos[numCommand]->here != NULL) {
+				
+			// Crear un pipe
+			if (pipe(pipe_here) == -1) {
+				perror("pipe");
+				exit(EXIT_FAILURE);
+			}
+		}
+		// .........................................................................................
 
 		//CREAMOS LOS PIPES
 		if (numCommand < cmds->numCommands - 1) {
@@ -586,13 +645,15 @@ execute_pipe(Commands *cmds)
 			err(EXIT_FAILURE,
 			    "Theres an error with the child proccess");
 		case 0:
-
+			
 			// redigirigmos la salida
 			// DEFINIMOS LA ENTRADA Y SALIDA ESTANDAR
 			int fd_in, fd_out;
 			fd_setter(cmds->comandos[numCommand], &fd_in, &fd_out);
 			//printf("Soy el comando %d y estoy leyendo de %d \n", numCommand, fd_in);
 			//printf("Soy el comando %d y mi salida es %d \n", numCommand, fd_out);
+
+			
 
 			if (numCommand > 0) {	//SI NO ES EL PRIMER COMANDO, LA ENTRADA LA TIENE QUE LEER DEL COMANDO ANTERIOR
 				dup2(pipes[numCommand - 1][0], fd_in);	//Si no es el pirmer comando, deberá leer la entrada de la salida del anterior.
@@ -604,6 +665,20 @@ execute_pipe(Commands *cmds)
 				dup2(pipes[numCommand][1], fd_out);	//REDIRIGIMOS LA SALIDA AL PIPE QUE LO UNE CON EL SIG COMANDO
 				close(pipes[numCommand][1]);	// COMO YA HEMOS HECHO EL DUPLICADO CON DUP2, LO PODEMOS BORRAR
 			}
+
+			// ......................... EN CASO DE HERE{} ................................................
+			if (cmds->comandos[numCommand]->here != NULL) {
+				close(pipe_here[1]); // CERRAMOS EL EXTREMO DE ESCRITURA DEL PIPE, YA QUE LEEMOS EL HERE{} DEL PADRE
+				
+				// Redirigir la entrada estándar al extremo de lectura del pipe
+				if (dup2(pipe_here[0], fd_in) == -1) { // REDIRIGIMOS LA ENTRADA ESTANDAR AL EXTREMO DE ESCRITURA DEL PIPE
+					perror("dup2");
+					exit(EXIT_FAILURE);
+				}
+
+				close(pipe_here[0]); // UNA VEZ DUPLICADO CON DUP2, CERRAMOS EL EXTREMO DE LECTURA TB
+			}
+			// .................................................................................................
 			// EJECUTAMOS EL COMANDO Y LO MANEJAMOS EN CASO DE ERROR
 			execv(cmds->comandos[numCommand]->path,
 			      cmds->comandos[numCommand]->argumentos);
@@ -611,6 +686,17 @@ execute_pipe(Commands *cmds)
 			       cmds->comandos[numCommand]->nombre);
 			exit(EXIT_FAILURE);
 		default:
+
+			// ......................... EN CASO DE HERE{} ................................................
+			if (cmds->comandos[numCommand]->here != NULL) {
+				close(pipe_here[0]);
+				// Escribir la cadena en el extremo de escritura del pipe
+				write(pipe_here[1], cmds->comandos[numCommand]->here, strlen(cmds->comandos[numCommand]->here)); // ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
+				close(pipe_here[1]); // UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
+			}
+			// ............................................................................................
+
+
 			// UNA VEZ QUE SE EJECUTE EL COMANDO, EL PADRE CERRARÁ LO QUE YA NO SE VA A VOLVER A USAR
 			if (numCommand < cmds->numCommands - 1) {
 				close(pipes[numCommand][1]);	// Cierra el extremo de escritura del pipe actual
@@ -640,6 +726,29 @@ exec_cmd(Command *cmd, int background)
 {
 	int child;
 
+	// ......................... EN CASO DE HERE{} ................................................
+	int pipe_here[2]; //CREAMOS UN PIPE QUE SE UTILIZARÁ EN CASO DE UTILIZAR EL PROTOCOLO HERE{}
+	if (cmd->here != NULL) {
+		
+		// Crear un pipe
+		if (pipe(pipe_here) == -1) {
+			perror("pipe");
+			exit(EXIT_FAILURE);
+		}
+	}
+	// .................................................................................................
+
+	// .......................... (SABER ESTATUS FINAL) EN CASO DE QUE & ..............................
+
+	//signal(SIGCHLD, sigchld_handler); // Esta función haá que se envíe en una señal cuando un proceso hijo termine
+									// De esta forma no necesitamos hacer wait->wexistatus para saber como terminó.
+
+	
+
+	// .................................................................................................
+
+	
+
 	switch (child = fork()) {
 	case -1:
 		err(EXIT_FAILURE, "Theres an error with the child");
@@ -648,15 +757,51 @@ exec_cmd(Command *cmd, int background)
 		int fd_in, fd_out;
 		fd_setter(cmd, &fd_in, &fd_out);
 		//printf("estoy leyendo de %d \n", fd_in);
+
+		// ......................... EN CASO DE HERE{} ................................................
+		if (cmd->here != NULL) {
+			close(pipe_here[1]); // CERRAMOS EL EXTREMO DE ESCRITURA DEL PIPE, YA QUE LEEMOS EL HERE{} DEL PADRE
+			
+			// Redirigir la entrada estándar al extremo de lectura del pipe
+			if (dup2(pipe_here[0], STDIN_FILENO) == -1) { // REDIRIGIMOS LA ENTRADA ESTANDAR AL EXTREMO DE ESCRITURA DEL PIPE
+				perror("dup2");
+				exit(EXIT_FAILURE);
+			}
+
+			close(pipe_here[0]); // UNA VEZ DUPLICADO CON DUP2, CERRAMOS EL EXTREMO DE LECTURA TB
+		}
+		// .................................................................................................
+
 		execv(cmd->path, cmd->argumentos);
 		
-		exit(0);
+		exit(EXIT_FAILURE);
 	default:
+		// ......................... EN CASO DE HERE{} ................................................
+		if (cmd->here != NULL) {
+			close(pipe_here[0]);
+			// Escribir la cadena en el extremo de escritura del pipe
+			write(pipe_here[1], cmd->here, strlen(cmd->here)); // ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
+			close(pipe_here[1]); // UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
+		}
+		// ............................................................................................
+
 		if (background == 0) {
+			printf("NO hay background \n");
+			char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
 			int status;
 			wait(&status);
+			
+			if (WIFEXITED(status)) {
+				//printf("Estado de salida del hijo: %d\n", WEXITSTATUS(status));
+				sprintf((char *)wexit, "%d", WEXITSTATUS(status)); // Convierte el entero a cadena
+				setenv("result", wexit, 1);
+			} else {
+				err(EXIT_FAILURE, "The child ended unnormally");
+			}
+			
 			printf("Command executed\n");
-		}
+		} 
+		
 
 		printf("Command executing in background\n");
 		
@@ -673,9 +818,6 @@ exec_builtin(Command *cmd) {
 	if (strcmp(cmd->nombre, "=") == 0) { 
 		//COMPROBAMOS SI HAY ALGUN PATH COMO ARGUMENTO
 		exec_asig(cmd);
-	}
-	if (strcmp(cmd->nombre, "$") == 0) {
-		exec_sust(cmd);
 	}
 }
 
@@ -718,6 +860,12 @@ free_command(Commands *cmds)
 		if (cmds->comandos[numCommand]->entrada != NULL) {
 			free(cmds->comandos[numCommand]->entrada);
 		}
+
+		if (cmds->comandos[numCommand]->here != NULL) {
+			free(cmds->comandos[numCommand]->here);
+			printf("liberacion here\n");
+		}
+
 		for (int i = 0; i < cmds->comandos[numCommand]->numArgumentos; i++) {
 			free(cmds->comandos[numCommand]->argumentos[i]);
 		}
@@ -752,6 +900,7 @@ commands_printer(Commands *cmds) {
 		printf("Path: %s \n",cmds->comandos[numCommand]->path);
 		printf("Entrada: %s \n",cmds->comandos[numCommand]->entrada);
 		printf("Salida: %s \n",cmds->comandos[numCommand]->salida);
+		printf("Entrada personalizada: %s \n",cmds->comandos[numCommand]->here);
 		for(int numArg=0; numArg < cmds->comandos[numCommand]->numArgumentos; numArg++) {
 			printf("Argumento %d: %s \n",numArg,cmds->comandos[numCommand]->argumentos[numArg]);
 		}
@@ -763,7 +912,7 @@ commands_printer(Commands *cmds) {
 int
 main(int argc, char *argv[])
 {
-	int status = 0;
+
     Commands Comandos;
     
 
@@ -773,8 +922,7 @@ main(int argc, char *argv[])
 
 	
 	do {
-
-		if (Comandos.background == 1 && Comandos.numCommands > 0) {
+		if (Comandos.background == 1) {
 			printf("Limpiando comandos \n");
 			free_command(&Comandos);
 		}
@@ -787,19 +935,17 @@ main(int argc, char *argv[])
 			commands_printer(&Comandos);
 			printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
 			exec_cmds(&Comandos);
+			Comandos.status = atoi(getenv("result"));
 		}
         
-	} while (Comandos.background == 1);	
+	} while (1);	
 	//} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
         //free_command(&Comandos);
         //free_command(&Comandos);
 	printf("\n");
-	printf("primera vuelta %d \n", Comandos.numCommands);
-	if (Comandos.numCommands > 0) {
-    	free_commands(&Comandos);
-	}
 
-    exit(status);
+    free_commands(&Comandos);
+    exit(Comandos.status);
     return 0;
 
 }

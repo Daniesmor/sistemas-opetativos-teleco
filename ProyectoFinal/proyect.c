@@ -494,7 +494,7 @@ search_path(Command *cmd) {
 	// COMPROBAMOS SI SE HA ENCONRADO EN ALGUNA DE LAS FUNCIONES
 	if (cmd->path == NULL) {
 		printf("Command %s not found. \n", cmd->nombre);
-		exit(1);
+		setenv("result", "1", 1);
 	}
 }
 
@@ -711,86 +711,92 @@ execute_pipe(Commands *cmds)
 void
 exec_cmd(Command *cmd, int background)
 {
-	int child;
 
-	int pipe_here[2]; //CREAMOS UN PIPE QUE SE UTILIZARÁ EN CASO DE UTILIZAR EL PROTOCOLO HERE{}
-	if (cmd->here != NULL) {
-		
-		// Crear un pipe
-		if (pipe(pipe_here) == -1) {
-			perror("pipe");
-			exit(EXIT_FAILURE);
-		}
-	}
+	if (cmd->path != NULL) {
+		int child;
 
-	// .......................... ENV VAR "result" EN CASO DE QUE & ..............................
-
-	signal(SIGCHLD, sigchld_handler); // Esta función haá que se envíe en una señal cuando un proceso hijo termine
-									// De esta forma no necesitamos hacer wait->wexistatus para saber como terminó.
-
-	
-
-	// .................................................................................................
-
-	
-
-	switch (child = fork()) {
-	case -1:
-		err(EXIT_FAILURE, "Theres an error with the child");
-	case 0:
-		// SETEAMOS LOS DESCRIPTORES DE FICHERO DE LA ENTRADA Y SALIDA
-		int fd_in, fd_out;
-		fd_setter(cmd, &fd_in, &fd_out);
-		//printf("estoy leyendo de %d \n", fd_in);
-
-		// ......................... EN CASO DE HERE{} ................................................
+		int pipe_here[2]; //CREAMOS UN PIPE QUE SE UTILIZARÁ EN CASO DE UTILIZAR EL PROTOCOLO HERE{}
 		if (cmd->here != NULL) {
-			close(pipe_here[1]); // CERRAMOS EL EXTREMO DE ESCRITURA DEL PIPE, YA QUE LEEMOS EL HERE{} DEL PADRE
 			
-			// Redirigir la entrada estándar al extremo de lectura del pipe
-			if (dup2(pipe_here[0], STDIN_FILENO) == -1) { // REDIRIGIMOS LA ENTRADA ESTANDAR AL EXTREMO DE ESCRITURA DEL PIPE
-				perror("dup2");
+			// Crear un pipe
+			if (pipe(pipe_here) == -1) {
+				perror("pipe");
 				exit(EXIT_FAILURE);
 			}
-
-			close(pipe_here[0]); // UNA VEZ DUPLICADO CON DUP2, CERRAMOS EL EXTREMO DE LECTURA TB
 		}
+
+		// .......................... ENV VAR "result" EN CASO DE QUE & ..............................
+
+		signal(SIGCHLD, sigchld_handler); // Esta función haá que se envíe en una señal cuando un proceso hijo termine
+										// De esta forma no necesitamos hacer wait->wexistatus para saber como terminó.
+
+		
+
 		// .................................................................................................
 
-		execv(cmd->path, cmd->argumentos);
 		
-		exit(0);
-	default:
-		// ......................... EN CASO DE HERE{} ................................................
-		if (cmd->here != NULL) {
-			close(pipe_here[0]);
-			// Escribir la cadena en el extremo de escritura del pipe
-			write(pipe_here[1], cmd->here, strlen(cmd->here)); // ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
-			close(pipe_here[1]); // UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
-		}
-		// ............................................................................................
 
-		if (background == 0) {
-			int status;
-			wait(&status);
-			printf("Command executed\n");
-			// ............ ENV VAR "result" ..................
-			char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
-			if (WIFEXITED(status)) {
-				//printf("Estado de salida del hijo: %d\n", WEXITSTATUS(status));
-				// ......... Para env var "result" .....................
-				sprintf((char *)wexit, "%d", WEXITSTATUS(status)); // Convierte el entero a cadena
-				setenv("result", wexit, 1);
-				// .........................................................
-			} else {
-				err(EXIT_FAILURE, "The child ended unnormally");
+		switch (child = fork()) {
+		case -1:
+			err(EXIT_FAILURE, "Theres an error with the child");
+		case 0:
+			// SETEAMOS LOS DESCRIPTORES DE FICHERO DE LA ENTRADA Y SALIDA
+			int fd_in, fd_out;
+			fd_setter(cmd, &fd_in, &fd_out);
+			//printf("estoy leyendo de %d \n", fd_in);
+
+			// ......................... EN CASO DE HERE{} ................................................
+			if (cmd->here != NULL) {
+				close(pipe_here[1]); // CERRAMOS EL EXTREMO DE ESCRITURA DEL PIPE, YA QUE LEEMOS EL HERE{} DEL PADRE
+				
+				// Redirigir la entrada estándar al extremo de lectura del pipe
+				if (dup2(pipe_here[0], STDIN_FILENO) == -1) { // REDIRIGIMOS LA ENTRADA ESTANDAR AL EXTREMO DE ESCRITURA DEL PIPE
+					perror("dup2");
+					exit(EXIT_FAILURE);
+				}
+
+				close(pipe_here[0]); // UNA VEZ DUPLICADO CON DUP2, CERRAMOS EL EXTREMO DE LECTURA TB
 			}
-			// ............................................
-		}
+			// .................................................................................................
 
-		printf("Command executing in background\n");
-		
+			execv(cmd->path, cmd->argumentos);
+			
+			exit(0);
+		default:
+			// ......................... EN CASO DE HERE{} ................................................
+			if (cmd->here != NULL) {
+				close(pipe_here[0]);
+				// Escribir la cadena en el extremo de escritura del pipe
+				write(pipe_here[1], cmd->here, strlen(cmd->here)); // ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
+				close(pipe_here[1]); // UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
+			}
+			// ............................................................................................
+
+			if (background == 0) {
+				int status;
+				wait(&status);
+				printf("Command executed\n");
+				// ............ ENV VAR "result" ..................
+				char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
+				if (WIFEXITED(status)) {
+					//printf("Estado de salida del hijo: %d\n", WEXITSTATUS(status));
+					// ......... Para env var "result" .....................
+					sprintf((char *)wexit, "%d", WEXITSTATUS(status)); // Convierte el entero a cadena
+					setenv("result", wexit, 1);
+					// .........................................................
+				} else {
+					err(EXIT_FAILURE, "The child ended unnormally");
+				}
+				// ............................................
+			}
+
+			printf("Command executing in background\n");
+			
+		}
+	} else {
+		setenv("result", "1", 1);
 	}
+	
 }
 // ------------------------ FIN DE EJECUCION DE PIPES Y COMANDOS INDIVIDUALES ---------------------------------------------------------------------
 
@@ -877,52 +883,76 @@ exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
 
 }
 
+void 
+remake_cmd(Command *cmd, int * background) { // FUNCION UTILIZADA PARA IFOK E IFNOT
+	// Tenemos que rehacer el comando para pasarselo al ejecutador de comandos.
+	cmd->path = NULL;
+	
+	cmd->nombre = cmd->argumentos[1];
+
+	for (int i = 1; i < cmd->numArgumentos; i++) {
+		if (strcmp(cmd->argumentos[i], "&") == 0) {
+			*background = 1;
+		}
+		cmd->argumentos[i-1] = cmd->argumentos[i];
+				
+	}
+
+	cmd->numArgumentos = cmd->numArgumentos -1;
+	printf("%s \n",cmd->nombre);
+	for (int i = 0; i < cmd->numArgumentos; i++) {
+		printf("args: %s \n", cmd->argumentos[i]);
+				
+	}
+	setLastArgumentNull(cmd);
+	
+}
+
 void
 exec_ifok(Command *cmd) {
 
-	// ......... Para env var "result" .....................
-	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
-	int status = 0;
-	// ..................................................
+	char * prev_status = getenv("result");
+	printf("este es el valor de prev: %s \n", prev_status);
 
+	if (prev_status == NULL) {
+		printf("There's no a prev command status. \n");
+	} else {
+		if (atoi(prev_status) == 0) { //SIGNIFICA QUE EL COMANDO PREVIO, HA SIDO EXITOSO, EN CASO CONTRARIO NO HACE NADA
+			int background = 0; // en el struct Commnds, gracias al tokenizador ya sabemos el valor, pero necesitamos saberlo para enviarselo a exec_cmd
+			remake_cmd(cmd, &background);
+			search_path(cmd);
+			exec_cmd(cmd, background);
+		} 
+	}
+
+}
+
+void 
+exec_ifnot(Command *cmd) {
+	
 	char * prev_status = getenv("result");
 
 
 	if (prev_status == NULL) {
 		printf("There's no a prev command status. \n");
 	} else {
-		if (atoi(prev_status) == 0) { //SIGNIFICA QUE EL COMANDO PREVIO, HA SIDO EXITOSO, EN CASO CONTRARIO NO HACE NADA
+		if (atoi(prev_status) != 0) { //SIGNIFICA QUE EL COMANDO PREVIO, NO HA SIDO EXITOSO, EN CASO CONTRARIO NO HACE NADA
 			// Tenemos que rehacer el comando para pasarselo al ejecutador de comandos.
 
 			int background = 0; // en el struct Commnds, gracias al tokenizador ya sabemos el valor, pero necesitamos saberlo para enviarselo a exec_cmd
-			cmd->nombre = cmd->argumentos[1];
-
-			for (int i = 1; i < cmd->numArgumentos; i++) {
-				if (strcmp(cmd->argumentos[i], "&") == 0) {
-					background = 1;
-				}
-				cmd->argumentos[i-1] = cmd->argumentos[i];
-				
-			}
-
-			cmd->numArgumentos = cmd->numArgumentos -1;
-			printf("%s \n",cmd->nombre);
-			for (int i = 0; i < cmd->numArgumentos; i++) {
-				printf("args: %s \n", cmd->argumentos[i]);
-				
-			}
-			setLastArgumentNull(cmd);
+			remake_cmd(cmd, &background);
 			search_path(cmd);
-			exec_cmd(cmd, background);
-			printf("f e el chat \n");
+			printf("algo aqui? \n");
+
+			exec_cmd(cmd, background); //SI PONEMOS ifnot lsa, lsa no existe, por tanto ifnot fallará
+
+
 		}
+		/* ACLARACION: SI EL COMANDO ANTERIOR NO ERA EXISTOSO, ESTE SE EJECUTA, LO QUE HARÁ QUE LA VARIABLE
+		"result" se cambie dentro del exec_cmd */
 	}
 
 
-	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
-    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
-	// ...............................................................
 }
 
 // --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
@@ -950,6 +980,9 @@ exec_builtin(Command *cmd) {
 	if (strcmp(cmd->nombre, "ifok") == 0) {
 		exec_ifok(cmd);
 	}
+	if (strcmp(cmd->nombre, "ifnot") == 0) {
+		exec_ifnot(cmd);
+	}
 }
 
 
@@ -961,12 +994,15 @@ exec_cmds(Commands *cmds)
 		execute_pipe(cmds);
 	} 
 	else {
+
 		// COMPROBAMOS SI ES UN COMANDO BUILT_IN
 		if (is_builtin(cmds->comandos[0]) == 1) {
 			exec_builtin(cmds->comandos[0]);
 		} else {
 			exec_cmd(cmds->comandos[0], cmds->background);
 		}
+		
+
 		
 	}
 
@@ -1053,18 +1089,28 @@ main(int argc, char *argv[])
 
 	
 	do {
+		printf("valorete 1 de result: %s \n", getenv("result"));
 		if (Comandos.background == 1) {
 			printf("Limpiando comandos \n");
 			free_command(&Comandos);
 		}
 		
 		initializerCommands(argv, &Comandos);
+	
 		//Comandos.background = 0;
 		read_lines(&Comandos);
-        search_paths(&Comandos);
-        commands_printer(&Comandos);
-        printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
-        exec_cmds(&Comandos);
+		
+	
+		search_paths(&Comandos);
+
+	
+		commands_printer(&Comandos);
+		printf("valorete 5 de result: %s \n", getenv("result"));
+		printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
+		exec_cmds(&Comandos);
+		printf("valorete 6 de result: %s \n", getenv("result"));
+		
+		
 	} while (1);	
 	//} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
         //free_command(&Comandos);

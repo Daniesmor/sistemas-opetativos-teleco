@@ -485,6 +485,19 @@ is_builtin(Command *cmd) { // Si es un built-in devuelve la 1
 	return found; //ES BUILT IN
 }
 
+void 
+search_path(Command *cmd) {
+	if (is_builtin(cmd) != 1) {
+		searchin_pwd(cmd); //SI NO ES BUILT-IN TENDREMOS QUE BUSCAR EL EXEC
+	} 
+		
+	// COMPROBAMOS SI SE HA ENCONRADO EN ALGUNA DE LAS FUNCIONES
+	if (cmd->path == NULL) {
+		printf("Command %s not found. \n", cmd->nombre);
+		exit(1);
+	}
+}
+
 
 void
 search_paths(Commands *cmds) {
@@ -492,15 +505,7 @@ search_paths(Commands *cmds) {
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
 		printf("-------- BUSCANDO EJECUTABLES DE %s -----------\n", cmds->comandos[numCommand]->nombre);
 		//searchin_builtins();
-		if (is_builtin(cmds->comandos[numCommand]) != 1) {
-			searchin_pwd(cmds->comandos[numCommand]); //SI NO ES BUILT-IN TENDREMOS QUE BUSCAR EL EXEC
-		} 
-		
-		// COMPROBAMOS SI SE HA ENCONRADO EN ALGUNA DE LAS FUNCIONES
-		if (cmds->comandos[numCommand]->path == NULL) {
-			printf("Command %s not found. \n", cmds->comandos[numCommand]->nombre);
-			exit(1);
-		}
+		search_path(cmds->comandos[numCommand]);
 	}
 
 }
@@ -538,90 +543,6 @@ fd_setter(Command *cmd, int* fd_in, int* fd_out) // ESTA FUNCION REALIZA LAS RED
 
 // ------------------------ FIN DE LOGICA PARA REDIRECCIONES -------------------------------------
 
-// ------------------------- COMANDOS BUILT-INS -------------------------------------------------------------------------------------------
-
-
-void 
-exec_cd(Command *cmd) {
-	// ......... Para env var "result" .....................
-	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
-	int status = 0;
-	// ..................................................
-
-
-	if (cmd->numArgumentos > 1) {
-			// SI HAY MAS DE UN ARGUMENTO SIGNIFICA QUE HAY UN PATH, args: (cd, path)		
-			chdir(cmd->argumentos[1]);
-	} else {
-		// NO NOS HAN DADO UN PATH ASI QUE TENENOS QUE IR A HOME
-		char *sh_home = getenv("HOME");
-		chdir(sh_home);
-	}
-
-	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
-    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
-	// ...............................................................
-}
-
-void 
-exec_asig(Command *cmd) {
-
-	// ......... Para env var "result" .....................
-	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
-	int status = 0;
-	// ..................................................
-
-	//printf("Queremos darle a %s el valor %s \n", cmd->argumentos[0], cmd->argumentos[1]);
-
-	if (setenv(cmd->argumentos[0], cmd->argumentos[1],1) != 0) { //EL 1 ES APRA SOBREESCRIBIR LA VARIABLE EN CASO DE QUE YA EXISTA
-        err(EXIT_FAILURE, "Error to establish environment variable");
-    }
-
-	// Acceder al valor de la variable de entorno
-    char *env_value = getenv(cmd->argumentos[0]);
-    if (env_value != NULL) {
-        printf("Valor de MY_VARIABLE: %s\n", env_value);
-    } else {
-        printf("MY_VARIABLE no está definida\n");
-    }
-
-
-	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
-    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
-	// ...............................................................
-
-}
-
-void 
-exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
-
-	// ......... Para env var "result" .....................
-	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
-	int status = 0;
-	// ..................................................
-
-	char* variable = getenv(cmd->argumentos[0]);
-
-	if (variable == NULL) {
-		printf("error: var %s does not exist. \n", cmd->argumentos[1]);
-
-	} else
-	{
-		printf("%s", variable);
-
-	}
-
-	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
-    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
-	// ...............................................................
-
-}
-
-// --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
-
 // ------------------------ LOGICA PARA SEÑALES -----------------------------------------------------------------------------------------
 
 void
@@ -645,10 +566,7 @@ sigchld_handler()
 
 // ----------------------- FIN DE LOGICA PARA SEÑALES -------------------------------------------------------------------------------------
 
-
-// ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
-
-
+// ------------------------ EJECUCION DE PIPES Y COMANDOS INDIVIDUALES ---------------------------------------------------------------------
 void
 execute_pipe(Commands *cmds)
 {
@@ -874,6 +792,146 @@ exec_cmd(Command *cmd, int background)
 		
 	}
 }
+// ------------------------ FIN DE EJECUCION DE PIPES Y COMANDOS INDIVIDUALES ---------------------------------------------------------------------
+
+
+// ------------------------- COMANDOS BUILT-INS -------------------------------------------------------------------------------------------
+
+
+void 
+exec_cd(Command *cmd) {
+	// ......... Para env var "result" .....................
+	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
+	int status = 0;
+	// ..................................................
+
+
+	if (cmd->numArgumentos > 1) {
+			// SI HAY MAS DE UN ARGUMENTO SIGNIFICA QUE HAY UN PATH, args: (cd, path)		
+			chdir(cmd->argumentos[1]);
+	} else {
+		// NO NOS HAN DADO UN PATH ASI QUE TENENOS QUE IR A HOME
+		char *sh_home = getenv("HOME");
+		chdir(sh_home);
+	}
+
+	// ............. Definimos env var "result" .....................
+	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
+    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
+	// ...............................................................
+}
+
+void 
+exec_asig(Command *cmd) {
+
+	// ......... Para env var "result" .....................
+	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
+	int status = 0;
+	// ..................................................
+
+	//printf("Queremos darle a %s el valor %s \n", cmd->argumentos[0], cmd->argumentos[1]);
+
+	if (setenv(cmd->argumentos[0], cmd->argumentos[1],1) != 0) { //EL 1 ES APRA SOBREESCRIBIR LA VARIABLE EN CASO DE QUE YA EXISTA
+        err(EXIT_FAILURE, "Error to establish environment variable");
+    }
+
+	// Acceder al valor de la variable de entorno
+    char *env_value = getenv(cmd->argumentos[0]);
+    if (env_value != NULL) {
+        printf("Valor de MY_VARIABLE: %s\n", env_value);
+    } else {
+        printf("MY_VARIABLE no está definida\n");
+    }
+
+
+	// ............. Definimos env var "result" .....................
+	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
+    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
+	// ...............................................................
+
+}
+
+void 
+exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
+
+	// ......... Para env var "result" .....................
+	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
+	int status = 0;
+	// ..................................................
+
+	char* variable = getenv(cmd->argumentos[0]);
+
+	if (variable == NULL) {
+		printf("error: var %s does not exist. \n", cmd->argumentos[1]);
+
+	} else
+	{
+		printf("%s", variable);
+
+	}
+
+	// ............. Definimos env var "result" .....................
+	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
+    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
+	// ...............................................................
+
+}
+
+void
+exec_ifok(Command *cmd) {
+
+	// ......... Para env var "result" .....................
+	char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
+	int status = 0;
+	// ..................................................
+
+	char * prev_status = getenv("result");
+
+
+	if (prev_status == NULL) {
+		printf("There's no a prev command status. \n");
+	} else {
+		if (atoi(prev_status) == 0) { //SIGNIFICA QUE EL COMANDO PREVIO, HA SIDO EXITOSO, EN CASO CONTRARIO NO HACE NADA
+			// Tenemos que rehacer el comando para pasarselo al ejecutador de comandos.
+
+			int background = 0; // en el struct Commnds, gracias al tokenizador ya sabemos el valor, pero necesitamos saberlo para enviarselo a exec_cmd
+			cmd->nombre = cmd->argumentos[1];
+
+			for (int i = 1; i < cmd->numArgumentos; i++) {
+				if (strcmp(cmd->argumentos[i], "&") == 0) {
+					background = 1;
+				}
+				cmd->argumentos[i-1] = cmd->argumentos[i];
+				
+			}
+
+			cmd->numArgumentos = cmd->numArgumentos -1;
+			printf("%s \n",cmd->nombre);
+			for (int i = 0; i < cmd->numArgumentos; i++) {
+				printf("args: %s \n", cmd->argumentos[i]);
+				
+			}
+			setLastArgumentNull(cmd);
+			search_path(cmd);
+			exec_cmd(cmd, background);
+			printf("f e el chat \n");
+		}
+	}
+
+
+	// ............. Definimos env var "result" .....................
+	sprintf((char *)wexit, "%d", WEXITSTATUS(status));	
+    setenv("result", wexit, 1); // Actualizar el valor de "result" dependiendo del estado
+	// ...............................................................
+}
+
+// --------------------------- FIN DE COMANDOS BUILT-INS -----------------------------------------------------------------------------------
+
+
+
+
+// ----------------------- LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
+
 
 void
 exec_builtin(Command *cmd) {
@@ -888,6 +946,9 @@ exec_builtin(Command *cmd) {
 	}
 	if (strcmp(cmd->nombre, "$") == 0) {
 		exec_sust(cmd);
+	}
+	if (strcmp(cmd->nombre, "ifok") == 0) {
+		exec_ifok(cmd);
 	}
 }
 
@@ -932,7 +993,7 @@ free_command(Commands *cmds)
 		}
 
 		if (cmds->comandos[numCommand]->here != NULL) {
-			//free(cmds->comandos[numCommand]->here);
+			free(cmds->comandos[numCommand]->here);
 			printf("liberacion here\n");
 		}
 
@@ -1004,14 +1065,14 @@ main(int argc, char *argv[])
         commands_printer(&Comandos);
         printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
         exec_cmds(&Comandos);
-	} while (Comandos.background == 1);	
+	} while (1);	
 	//} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
         //free_command(&Comandos);
         //free_command(&Comandos);
 	printf("\n");
 
     free_commands(&Comandos);
-   exit(atoi(getenv("result")));
+   	exit(atoi(getenv("result")));
     return 0;
 
 }

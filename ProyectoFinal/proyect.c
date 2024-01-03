@@ -242,7 +242,8 @@ sust_vars(char *token) {
 	char *token_copy1 = strdup(token);
 	char *token_copy2 = strdup(token);
 	char *token_copy3 = strdup(token);
-
+	char *new_token;
+	char *variable;
 
 	char *sustituir;
 	sustituir = strtok_r(token_copy1, "/", &saveptro);
@@ -262,14 +263,35 @@ sust_vars(char *token) {
 	//vars = strtok_r(token, vars, &saveptro);
 
 
-	token = getenv(vars);
-	if (token == NULL) {
-		token = "";
+	variable = getenv(vars);
+	if (variable == NULL) {
+		printf("me solto nul \n");
+		variable = ""; //SI LA VARIABLE NO EXISTE SE DEJA VACIA (ESTANDARES)
+		printf("%ld\n", sizeof(variable));
 	}
 
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
-	char *new_token = malloc(sizeof(getenv(vars))+ sizeof(constante)+ 1); //El 1 es del '/0'
-	new_token = strcat(token, constante);
+	if (constante != NULL) {
+		new_token = malloc(strlen(variable)+ strlen(constante)+ 1); //El 1 es del '/0'
+
+		if (new_token != NULL) {
+			if (strcmp(variable, "") == 0) {
+				strcpy(new_token, constante);
+			} else {
+				strcpy(new_token, variable);
+				strcat(new_token, constante);
+				
+			}
+		} else {
+			memLocateFailed();
+		}
+		
+		
+		
+	} else {
+		new_token = strdup(variable);
+	}
+
 
 	free(token_copy1);
 	free(token_copy2);
@@ -316,8 +338,9 @@ check_glob(char *token) {
 
 		globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
 	} else if (return_value == GLOB_NOMATCH) {
-		printf("NO se enco0ntraron archivos que coincidan con el patrón. \n");
-		return "";
+		printf("NO se enco0ntraron archivos que coincidan con el patrón. \n"); 
+		// EN CASO DE QUE NO EXISTA SE DEVUELVE EL TOKEN SIN MODIFICAR
+		return token;
 	} else {
 		printf("Error al ejecutar glob(). \n");
 		return "";
@@ -400,7 +423,7 @@ tokenizator(char *line, Commands *cmds)
 
 				token = sust_vars(token);
 				
-
+				/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
 
 			}
 			// ...............................................................

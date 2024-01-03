@@ -214,8 +214,8 @@ variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO C
 
 
 void
-variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
-{
+sust_cmd(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
+{	//CODIGO UTILIZADO EN CASO DE QUE SOLO SE ESCRIBA $VAR, SIN COMANDO PREVIO
 	char *vars;
 	char *saveptro;
 
@@ -231,6 +231,52 @@ variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE CO
 	cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(vars);
 	cmds->comandos[cmds->numCommands]->numArgumentos++;
 
+}
+
+
+char *
+sust_vars(char *token) {
+	char *vars;
+	char *saveptro;
+	
+	char *token_copy1 = strdup(token);
+	char *token_copy2 = strdup(token);
+	char *token_copy3 = strdup(token);
+
+
+	char *sustituir;
+	sustituir = strtok_r(token_copy1, "/", &saveptro);
+	printf("Esta es la porcion que vamos a sustituir: %s \n", sustituir);
+
+	char *constante;
+	constante = strtok_r(token_copy3, sustituir, &saveptro);
+	printf("Esta es la porcion que quedará constante: %s \n", constante);
+
+	//Eliminamos el '$' para extraer el nombre de la variable
+	vars = strtok_r(token_copy2, "$", &saveptro);
+	printf("Variable sin delemitar: %s\n", vars);
+	//delimitamos la variable
+	vars = strtok_r(vars, "/", &saveptro);
+	printf("Variable delimitada: %s\n", vars);
+
+	//vars = strtok_r(token, vars, &saveptro);
+
+
+	token = getenv(vars);
+	if (token == NULL) {
+		token = "";
+	}
+
+	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
+	char *new_token = malloc(sizeof(getenv(vars))+ sizeof(constante)+ 1); //El 1 es del '/0'
+	new_token = strcat(token, constante);
+
+	free(token_copy1);
+	free(token_copy2);
+	free(token_copy3);
+	
+	return new_token;
+	free(new_token);
 }
 
 int 
@@ -280,20 +326,6 @@ check_glob(char *token) {
 
 
 
-char *
-sust_vars(char *token) {
-	char *vars;
-	char *saveptro;
-
-	vars = strtok_r(token, "$", &saveptro);
-	
-
-	token = getenv(vars);
-	if (token == NULL) {
-		token = "";
-	}
-	return token;
-}
 
 
 
@@ -345,8 +377,6 @@ tokenizator(char *line, Commands *cmds)
 		
 	token = strtok_r(line, " ", &saveptr); //Token es una dir de memoria
 
-	//token = strtok_r(NULL, " ", &saveptr);
-		//cmds->numCommands++;
 	
 	
 	while (token != NULL) {
@@ -354,32 +384,37 @@ tokenizator(char *line, Commands *cmds)
 		if (cmds->comandos[cmds->numCommands]->numArgumentos != 0) {
 			token = strtok_r(NULL, " ", &saveptr);
 		}
-		/*
-		if (is_glob(token) != 0) {
-			
-			
-			token = check_glob(token);
-			printf("token fuera glob: %s \n", token);
-		}
-		*/
-		printf("valor de token: %s \n", token);
+
+
 
 		
 
 		if (token != NULL) {
 
+			// ......... Codigo destinado a la sustitucion de ENV VARS ..........................
 			if (strchr(token, '$') != NULL) {
-				printf("aqui no pasamos\n");
+				
 				if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
-					variable_sustitution(cmds, token);
+					sust_cmd(cmds, token);
 				}
 
 				token = sust_vars(token);
-				printf("token fuera $: %s \n", token);
+				
 
 
 			}
+			// ...............................................................
 
+			// ......... Codigo destinado al globbing ..........................
+			/*
+			if (is_glob(token) != 0) {
+				
+				
+				token = check_glob(token);
+				printf("token fuera glob: %s \n", token);
+			}
+			*/
+			// ...............................................................
 
 
  			//LOGICA PARA DETECTAR PIPES
@@ -414,7 +449,7 @@ tokenizator(char *line, Commands *cmds)
 			} else if (strcmp(token, "&") == 0) {
 				cmds->background = 1;
             } else if (strchr(token, '=') != NULL) {
-				printf("parece que hay una sust \n");
+				
 				variable_asig(cmds, token);
 
 				
@@ -428,24 +463,23 @@ tokenizator(char *line, Commands *cmds)
 						memLocateFailed();
 						return;
 					}
-					printf("aqui s eha llegado?\n");
+					
 					cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
-					printf("argumento: %s \n", cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos]);
-					printf("aqui s eha llegado?2\n");
+					
+					
 					cmds->comandos[cmds->numCommands]->numArgumentos++;
-					printf("aqui s eha llegado?3\n");
-					//token = strtok_r(NULL, " ", &saveptr);
+					
 				} else {
-					printf("nombre añadido \n");
+					
 					assignCommandName(cmds->comandos[cmds->numCommands], token);
 				}
 
             }
         }
     }
-	printf("aqui s eha llegado?4\n");
+	
     setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-	printf("aqui s eha llegado?5\n");
+
     cmds->numCommands++;
 }
 
@@ -1184,7 +1218,7 @@ main(int argc, char *argv[])
 
 	
 	do {
-		printf("valorete 1 de result: %s \n", getenv("result"));
+		
 		if (Comandos.background == 1) {
 			printf("Limpiando comandos \n");
 			free_command(&Comandos);
@@ -1200,10 +1234,10 @@ main(int argc, char *argv[])
 
 	
 		commands_printer(&Comandos);
-		printf("valorete 5 de result: %s \n", getenv("result"));
+		
 		printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
 		exec_cmds(&Comandos);
-		printf("valorete 6 de result: %s \n", getenv("result"));
+		
 		
 		
 	} while (1);	

@@ -179,7 +179,7 @@ setLastArgumentNull(Command *cmd)
 
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMANDS -----------------------------------------------------------------------------
 
-// ------------------------------ ASIGNACION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
+// ------------------------------ ASIGNACION Y SUSTITUCION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
 
 void
 variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
@@ -301,6 +301,11 @@ sust_vars(char *token) {
 	free(new_token);
 }
 
+// ------------------------------ FIN DE ASIGNACION Y SUSTITUCION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
+
+
+// ------------------------------ LOGICA PARA EL OPCIONAL III (Implementacion de globbing) ------------------------------------------------
+
 int 
 is_glob(char *token) {
 	int found = 0;
@@ -319,24 +324,27 @@ is_glob(char *token) {
 	return found;
 }
 
-char *
-check_glob(char *token) {
-	glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
+int
+check_glob(char *token, glob_t *glob_result) {
+	//glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
 	int return_value; // VALOR QUE DEVOLVERÁ LA FUNCIÓN glob()
 
 	//ESTE SERÁ EL PATRÓN DEE BUSQUEDA, QUE CONTENDRA LOS MULTIPLES PATRONES SEPARADAOS POR '|'
-	return_value = glob(token, 0, NULL, &glob_result);
+	return_value = glob(token, 0, NULL, glob_result);
 	
+	return return_value;
+	/*
 	if (return_value == 0) { // SIGNIFICA QUE GLOB HA FUNCIONADO BIEN, Y HA ENCONTRADO AL MENOS UNA COINCIDENCIA
-		printf("valor de pathc: %ld \n", glob_result.gl_pathc);
+		
+		printf("valor de pathc: %ld \n", *glob_result.gl_pathc);
 		for (int i = 0; i < glob_result.gl_pathc; i++) {
 			printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
 			token = glob_result.gl_pathv[i];
 			
 		}
-		return token;
-
-		globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
+		return glob_result;
+		
+		//globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
 	} else if (return_value == GLOB_NOMATCH) {
 		printf("NO se enco0ntraron archivos que coincidan con el patrón. \n"); 
 		// EN CASO DE QUE NO EXISTA SE DEVUELVE EL TOKEN SIN MODIFICAR
@@ -345,14 +353,12 @@ check_glob(char *token) {
 		printf("Error al ejecutar glob(). \n");
 		return "";
 	}
+	*/
 }
 
+// ------------------------------ FIN LOGICA PARA EL OPCIONAL III (Implementacion de globbing) ------------------------------------------------
 
 
-
-
-
-// ------------------------------ FIN ASIGNACION DE VARIABLES DE ENTORNO ---------------------------------------------------------------------------
 
 // ------------------------------- LOGICA PARA EL OPCIONAL I (IMPLEMENTACION DE HERE{}) ------------------------------------------------------------
 
@@ -380,8 +386,94 @@ first_optional(Commands *cmds) {
 
 // ------------------------------- FIN LOGICA PARA EL OPCIONAL I (IMPLEMENTACION DE HERE{}) ------------------------------------------------------------
 
-
 // ----------------------- FUNCIONES PARA TOKENIZAR ENTRADA Y SETEAR COMANDOS Y SUS RESPECTIVOS ARGUMENTOS ----------------------------------------------------------------------------------
+
+void
+instruction_pipe(Commands *cmds, char **token, char **saveptr) {
+	setLastArgumentNull(cmds->comandos[cmds->numCommands]);
+    cmds->numCommands++;
+
+    if (reserve_commands(cmds) == NULL) {
+        // Manejar el error de asignación de memoria
+        memLocateFailed();
+        return;
+    }
+
+    *token = strtok_r(NULL, " ", *&saveptr);
+    assignCommandName(cmds->comandos[cmds->numCommands], *token);
+}
+
+void
+instruction_output_redirection(Commands *cmds, char **token, char **saveptr) {
+	char *file_name = strtok_r(NULL, " ", *&saveptr);
+    cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
+    //*token = strtok_r(NULL, " ", *&saveptr);
+}
+
+void
+instruction_input_redirection(Commands *cmds, char **token, char **saveptr) {
+	char *file_name = strtok_r(NULL, " ", *&saveptr);
+    cmds->comandos[0]->entrada = strdup(file_name);
+    //*token = strtok_r(NULL, " ", *&saveptr);
+}
+
+void
+instruction_here(Commands *cmds) {
+	if (cmds->background == 0) { //SI EL COMANDO NO TIENE "&", LEERA LA ENTRADA ESTANDAR DE HERE
+		first_optional(cmds);
+	}
+}
+
+void
+instruction_background(Commands *cmds) {
+	cmds->background = 1;
+}
+
+void
+instruction_regular(Commands *cmds, char **token) {
+	
+	if (cmds->comandos[cmds->numCommands]->nombre != NULL) {	
+		if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
+			// Manejar el error de asignación de memoria
+			memLocateFailed();
+			return;
+		}		
+		cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(*token);	
+		cmds->comandos[cmds->numCommands]->numArgumentos++;	
+	} else {	
+		assignCommandName(cmds->comandos[cmds->numCommands], *token);
+	}
+
+}
+
+void
+instruction_classifier(Commands *cmds, char **token, char **saveptr) {
+// METER EN OTRA FUNCION -------------------------------------------------------
+    if (strcmp(*token, "|") == 0) {
+		instruction_pipe(cmds, token, saveptr);
+    } else if (strcmp(*token, ">") == 0) {
+        // Redirección de salida
+		instruction_output_redirection(cmds, token, saveptr);
+        
+    } else if (strcmp(*token, "<") == 0) {
+        // Redirección de entrada
+		instruction_input_redirection(cmds, token, saveptr);
+        
+	} else if (strstr(*token, "HERE{") != NULL) {	
+		instruction_here(cmds);
+	} else if (strcmp(*token, "&") == 0) {
+		instruction_background(cmds);
+		
+    } else if (strchr(*token, '=') != NULL) {
+		variable_asig(cmds, *token);
+	}
+	else {
+		instruction_regular(cmds, token);
+
+    }
+
+	// FIN DE METER EN OTRA FUNCION -------------------------------------------------------
+}
 
 void
 tokenizator(char *line, Commands *cmds) 
@@ -389,6 +481,7 @@ tokenizator(char *line, Commands *cmds)
     
 	char *token;
 	char *saveptr;
+	glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
 
 	//SETEAMOS EL PRIMER COMANDO
 	if (reserve_commands(cmds) == NULL) {
@@ -400,17 +493,11 @@ tokenizator(char *line, Commands *cmds)
 		
 	token = strtok_r(line, " ", &saveptr); //Token es una dir de memoria
 
-	
-	
 	while (token != NULL) {
 
 		if (cmds->comandos[cmds->numCommands]->numArgumentos != 0) {
 			token = strtok_r(NULL, " ", &saveptr);
 		}
-
-
-
-		
 
 		if (token != NULL) {
 
@@ -420,89 +507,42 @@ tokenizator(char *line, Commands *cmds)
 				if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
 					sust_cmd(cmds, token);
 				}
-
 				token = sust_vars(token);
-				
 				/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
 
 			}
 			// ...............................................................
 
 			// ......... Codigo destinado al globbing ..........................
-			/*
+			
 			if (is_glob(token) != 0) {
 				
 				
-				token = check_glob(token);
-				printf("token fuera glob: %s \n", token);
+				int patterns_found = check_glob(token, &glob_result);
+				if (patterns_found == 0) {
+					for (int i = 0; i < glob_result.gl_pathc; i++) {
+						printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
+						token = glob_result.gl_pathv[i];
+						instruction_classifier(cmds, &token, &saveptr);
+					}
+				} else {
+					instruction_classifier(cmds, &token, &saveptr);
+				}
+				globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
+				//printf("token fuera glob: %s \n", token);
+			} else {
+				instruction_classifier(cmds, &token, &saveptr);
 			}
-			*/
+			
 			// ...............................................................
 
+			
 
- 			//LOGICA PARA DETECTAR PIPES
-            if (strcmp(token, "|") == 0) {
-                setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-                cmds->numCommands++;
-
-                if (reserve_commands(cmds) == NULL) {
-                    // Manejar el error de asignación de memoria
-                    memLocateFailed();
-                    return;
-                }
-
-                token = strtok_r(NULL, " ", &saveptr);
-                assignCommandName(cmds->comandos[cmds->numCommands], token);
-            } else if (strcmp(token, ">") == 0) {
-                // Redirección de salida
-                char *file_name = strtok_r(NULL, " ", &saveptr);
-                cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
-                //token = strtok_r(NULL, " ", &saveptr);
-            } else if (strcmp(token, "<") == 0) {
-                // Redirección de entrada
-                char *file_name = strtok_r(NULL, " ", &saveptr);
-                cmds->comandos[0]->entrada = strdup(file_name);
-                //token = strtok_r(NULL, " ", &saveptr);
-			} else if (strstr(token, "HERE{") != NULL) {
-				if (cmds->background == 0) { //SI EL COMANDO NO TIENE "&", LEERA LA ENTRADA ESTANDAR DE HERE
-
-					first_optional(cmds);
-
-				}
-			} else if (strcmp(token, "&") == 0) {
-				cmds->background = 1;
-            } else if (strchr(token, '=') != NULL) {
-				
-				variable_asig(cmds, token);
-
-				
-			}
-			else {
-				
-				if (cmds->comandos[cmds->numCommands]->nombre != NULL) {
-					
-					if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
-						// Manejar el error de asignación de memoria
-						memLocateFailed();
-						return;
-					}
-					
-					cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
-					
-					
-					cmds->comandos[cmds->numCommands]->numArgumentos++;
-					
-				} else {
-					
-					assignCommandName(cmds->comandos[cmds->numCommands], token);
-				}
-
-            }
         }
     }
 	
     setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-
+	
     cmds->numCommands++;
 }
 

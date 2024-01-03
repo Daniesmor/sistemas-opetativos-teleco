@@ -7,6 +7,8 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <signal.h>
+#include <glob.h>
+
 
 // ----------------------- PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
@@ -231,6 +233,69 @@ variable_sustitution(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE CO
 
 }
 
+int 
+is_glob(char *token) {
+	int found = 0;
+	if (strchr(token, '*')) {
+		found = 1;
+	}
+	if (strchr(token, '?')) {
+		found = 1;
+	}
+	if (strchr(token, '[')) {
+		found = 1;
+	}
+	if (strchr(token, ']')) {
+		found = 1;
+	}
+	return found;
+}
+
+char *
+check_glob(char *token) {
+	glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
+	int return_value; // VALOR QUE DEVOLVERÁ LA FUNCIÓN glob()
+
+	//ESTE SERÁ EL PATRÓN DEE BUSQUEDA, QUE CONTENDRA LOS MULTIPLES PATRONES SEPARADAOS POR '|'
+	return_value = glob(token, 0, NULL, &glob_result);
+	
+	if (return_value == 0) { // SIGNIFICA QUE GLOB HA FUNCIONADO BIEN, Y HA ENCONTRADO AL MENOS UNA COINCIDENCIA
+		printf("valor de pathc: %ld \n", glob_result.gl_pathc);
+		for (int i = 0; i < glob_result.gl_pathc; i++) {
+			printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
+			token = glob_result.gl_pathv[i];
+			
+		}
+		return token;
+
+		globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
+	} else if (return_value == GLOB_NOMATCH) {
+		printf("NO se enco0ntraron archivos que coincidan con el patrón. \n");
+		return "";
+	} else {
+		printf("Error al ejecutar glob(). \n");
+		return "";
+	}
+}
+
+
+
+char *
+sust_vars(char *token) {
+	char *vars;
+	char *saveptro;
+
+	vars = strtok_r(token, "$", &saveptro);
+	
+
+	token = getenv(vars);
+	if (token == NULL) {
+		token = "";
+	}
+	return token;
+}
+
+
 
 // ------------------------------ FIN ASIGNACION DE VARIABLES DE ENTORNO ---------------------------------------------------------------------------
 
@@ -270,7 +335,6 @@ tokenizator(char *line, Commands *cmds)
 	char *token;
 	char *saveptr;
 
-
 	//SETEAMOS EL PRIMER COMANDO
 	if (reserve_commands(cmds) == NULL) {
 		// Manejar el error de asignación de memoria
@@ -290,8 +354,34 @@ tokenizator(char *line, Commands *cmds)
 		if (cmds->comandos[cmds->numCommands]->numArgumentos != 0) {
 			token = strtok_r(NULL, " ", &saveptr);
 		}
+		/*
+		if (is_glob(token) != 0) {
+			
+			
+			token = check_glob(token);
+			printf("token fuera glob: %s \n", token);
+		}
+		*/
+		printf("valor de token: %s \n", token);
+
+		
 
 		if (token != NULL) {
+
+			if (strchr(token, '$') != NULL) {
+				printf("aqui no pasamos\n");
+				if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
+					variable_sustitution(cmds, token);
+				}
+
+				token = sust_vars(token);
+				printf("token fuera $: %s \n", token);
+
+
+			}
+
+
+
  			//LOGICA PARA DETECTAR PIPES
             if (strcmp(token, "|") == 0) {
                 setLastArgumentNull(cmds->comandos[cmds->numCommands]);
@@ -315,9 +405,6 @@ tokenizator(char *line, Commands *cmds)
                 char *file_name = strtok_r(NULL, " ", &saveptr);
                 cmds->comandos[0]->entrada = strdup(file_name);
                 //token = strtok_r(NULL, " ", &saveptr);
-			} else if (strchr(token, '$') != NULL) {
-				variable_sustitution(cmds, token);
-				token = strtok_r(NULL, " ", &saveptr);
 			} else if (strstr(token, "HERE{") != NULL) {
 				if (cmds->background == 0) { //SI EL COMANDO NO TIENE "&", LEERA LA ENTRADA ESTANDAR DE HERE
 
@@ -333,24 +420,32 @@ tokenizator(char *line, Commands *cmds)
 				
 			}
 			else {
+				
 				if (cmds->comandos[cmds->numCommands]->nombre != NULL) {
+					
 					if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
 						// Manejar el error de asignación de memoria
 						memLocateFailed();
 						return;
 					}
-
+					printf("aqui s eha llegado?\n");
 					cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(token);
+					printf("argumento: %s \n", cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos]);
+					printf("aqui s eha llegado?2\n");
 					cmds->comandos[cmds->numCommands]->numArgumentos++;
+					printf("aqui s eha llegado?3\n");
 					//token = strtok_r(NULL, " ", &saveptr);
 				} else {
+					printf("nombre añadido \n");
 					assignCommandName(cmds->comandos[cmds->numCommands], token);
 				}
 
             }
         }
     }
+	printf("aqui s eha llegado?4\n");
     setLastArgumentNull(cmds->comandos[cmds->numCommands]);
+	printf("aqui s eha llegado?5\n");
     cmds->numCommands++;
 }
 

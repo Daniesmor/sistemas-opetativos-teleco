@@ -270,7 +270,7 @@ char *
 remake_token(char * variable, char *ptr) {
 	char *new_token;
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
-		if (ptr != NULL) {
+		if (strcmp(ptr, "") != 0) {
 			
 			new_token = malloc(strlen(variable)+ strlen(ptr)+ 2); //El 1 es del '/0' y otro por el "/"
 
@@ -485,13 +485,30 @@ envar_detector(Commands *cmds, char **token) {
 }
 
 void
+globbing_detector(Commands *cmds, char *token, char *saveptr) {
+	glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
+				
+	int patterns_found = check_glob(token, &glob_result);
+	if (patterns_found == 0) {
+		for (int i = 0; i < glob_result.gl_pathc; i++) {
+			printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
+			token = glob_result.gl_pathv[i];
+			instruction_classifier(cmds, &token, &saveptr);
+		}
+	} else {
+		instruction_classifier(cmds, &token, &saveptr);
+	}
+	globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
+				
+}
+
+void
 tokenizator(char *line, Commands *cmds) 
 {
     
 	char *token;
 	char *saveptr;
-	glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
-
+	
 	//SETEAMOS EL PRIMER COMANDO
 	if (reserve_commands(cmds) == NULL) {
 		// Manejar el error de asignación de memoria
@@ -512,34 +529,17 @@ tokenizator(char *line, Commands *cmds)
 
 			// ......... Codigo destinado a la sustitucion de ENV VARS ..........................
 			envar_detector(cmds, &token);
-			
 			// ...............................................................
-
-			// ......... Codigo destinado al globbing ..........................
-			
+			// ......... Codigo destinado al globbing ..........................	
+	
 			if (is_glob(token) != 0) {
 				
+				globbing_detector(cmds, token, saveptr);
 				
-				int patterns_found = check_glob(token, &glob_result);
-				if (patterns_found == 0) {
-					for (int i = 0; i < glob_result.gl_pathc; i++) {
-						printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
-						token = glob_result.gl_pathv[i];
-						instruction_classifier(cmds, &token, &saveptr);
-					}
-				} else {
-					instruction_classifier(cmds, &token, &saveptr);
-				}
-				globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
-				//printf("token fuera glob: %s \n", token);
 			} else {
 				instruction_classifier(cmds, &token, &saveptr);
-			}
-			
+			}		
 			// ...............................................................
-
-			
-
         }
     }
 	
@@ -577,6 +577,30 @@ read_lines(Commands *cmds)
 // ----------------------- FUNCIONES DEDICADAS A LA BUSCADA DE EJECUTABLES EN DIFERENTES PATHS -------------------------------------------------------
 
 void
+create_currentdir(char *token, Command *cmd, char **current_dir) { //CREA LA RUTA, CON EL NOMBRE DE PROGRAMA ETC...
+
+	*current_dir = malloc(strlen(token) + 2 + strlen(cmd->nombre));  // +2 para el '/' y '\0' y luego lo que ocupe el nombre del comando
+	if (*current_dir == NULL) {
+		memLocateFailed();
+	}
+	strcpy(*current_dir, token);
+	strcat(*current_dir, "/");
+	strcat(*current_dir, cmd->nombre);
+		
+}
+
+void
+access_dir(char *current_dir, Command *cmd) { //COMPRUEBA SI EXISTE EL EJECUTABLE, EN TAL CASO LO PONE EN path
+	if (access(current_dir, F_OK) == 0) {
+		if (cmd->path != NULL) {
+            free(cmd->path);
+        }
+		cmd->path = strdup(current_dir);
+			//printf("Se ha encontrado en: %s \n", cmd->path);
+	}
+}
+
+void
 searchin_paths(Command *cmd) 
 {
 	//printf("-----> Buscamos en $PATHS \n");
@@ -592,24 +616,13 @@ searchin_paths(Command *cmd)
 	token = strtok_r(sh_paths_copy, ":", &saveptr);
 
 	while (token != NULL) {
-		current_dir = malloc(strlen(token) + 2 + strlen(cmd->nombre));  // +2 para el '/' y '\0' y luego lo que ocupe el nombre del comando
-		if (current_dir == NULL) {
-			memLocateFailed();
-		}
-		strcpy(current_dir, token);
-		strcat(current_dir, "/");
-		strcat(current_dir, cmd->nombre);
-		//printf("Se esta buscando en: %s \n", current_dir);
+		
+		create_currentdir(token, cmd, &current_dir); //CREAMOS EL PATH DONDE VAMOS A BUSCAR
 
 		//BUSCAMOS EL EXEC, Y NOS QUEDAREMOS CON EL ULTIMO PATH DONDE SE HALLA ENCONTRADO SI ES QUE SE HA ENCONTRADO EN VARIOS
+		//printf("token fuera glob: %s \n", token);
+		access_dir(current_dir, cmd);
 		
-		if (access(current_dir, F_OK) == 0) {
-			if (cmd->path != NULL) {
-                free(cmd->path);
-            }
-			cmd->path = strdup(current_dir);
-			//printf("Se ha encontrado en: %s \n", cmd->path);
-		}
 		free(current_dir);		
 		token = strtok_r(NULL, ":", &saveptr);
 	}
@@ -1200,7 +1213,6 @@ free_command(Commands *cmds)
 
 		if (cmds->comandos[numCommand]->here != NULL) {
 			free(cmds->comandos[numCommand]->here);
-			printf("liberacion here\n");
 		}
 
 		for (int i = 0; i < cmds->comandos[numCommand]->numArgumentos; i++) {
@@ -1262,7 +1274,7 @@ main(int argc, char *argv[])
 		
 		if (Comandos.background == 1) {
 			printf("Limpiando comandos \n");
-			free_command(&Comandos);
+			free_commands(&Comandos);
 		}
 		
 		initializerCommands(argv, &Comandos);
@@ -1278,7 +1290,7 @@ main(int argc, char *argv[])
 		
 		printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
 		exec_cmds(&Comandos);
-		
+		//free_commands(&Comandos);
 		
 		
 	} while (1);	
@@ -1286,8 +1298,8 @@ main(int argc, char *argv[])
         //free_command(&Comandos);
         //free_command(&Comandos);
 	printf("\n");
-
     free_commands(&Comandos);
+	
    	exit(atoi(getenv("result")));
     return 0;
 

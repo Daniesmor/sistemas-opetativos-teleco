@@ -266,36 +266,37 @@ write_newtoken(char **new_token,char *variable, char *ptr) {
 
 }
 
-char *
-remake_token(char * variable, char *ptr) {
-	char *new_token;
+void
+remake_token(char **new_token, char * variable, char *ptr) {
+	
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
 		if (strcmp(ptr, "") != 0) {
 			
-			new_token = malloc(strlen(variable)+ strlen(ptr)+ 2); //El 1 es del '/0' y otro por el "/"
+			*new_token = malloc(strlen(variable)+ strlen(ptr)+ 2); //El 1 es del '/0' y otro por el "/"
 
-			if (new_token != NULL) {
-				write_newtoken(&new_token ,variable, ptr);
+			if (*new_token != NULL) {
+				write_newtoken(*&new_token ,variable, ptr);
 				
 			} else {
 				memLocateFailed();
 			}		
 				
 		} else {
-			new_token = strdup(variable);
+			*new_token = strdup(variable);
 		}
 
-		return new_token;
+/*
 		if (ptr != NULL) {
 			free(new_token);
-		}
+			printf("se ha ejecutado esto?\n");
+		}*/
 		
 }
 
-char *
-sust_vars(char *token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL TOKEN, Y DEJARLO INTACTO
+void
+sust_vars(char **token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL TOKEN, Y DEJARLO INTACTO
 	
-	char *ptr = token;
+	char *ptr = *token;
 	char *found = NULL;
 	char *variable;
 	char *delimiter = "/";
@@ -308,11 +309,12 @@ sust_vars(char *token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL
 		// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
 		ptr = ptr + (strlen(found)+1); // EL 1 ES DEL 
 		variable = get_variable(found);
-		new_token = remake_token(variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
-		return new_token;
+		remake_token(&new_token, variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
+		*token = strdup(new_token);
+		free(new_token);
 		
 	} else {
-		return "$";
+		*token = "$";
 	}
 
 }
@@ -478,7 +480,7 @@ envar_detector(Commands *cmds, char **token) {
 		if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
 			sust_cmd(cmds, *token);
 		}
-		*token = sust_vars(*token);
+		sust_vars(*&token);
 		/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
 
 	}

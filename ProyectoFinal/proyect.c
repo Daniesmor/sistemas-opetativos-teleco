@@ -162,6 +162,7 @@ reserve_commands(Commands *cmds) //GESTIONA LA LISTA QUE CONTENDRÁ LOS PUNTEROS
 
 }
 
+
 void
 setLastArgumentNull(Command *cmd)
 {
@@ -182,14 +183,8 @@ setLastArgumentNull(Command *cmd)
 // ------------------------------ ASIGNACION Y SUSTITUCION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
 
 void
-variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
-{
-	char *vars;
-	char *saveptr;
+add_asignation_arg(char *vars, Commands *cmds) {
 
-	// ASIGNAMOS EL NOMBRE DEL COMANDO COMO "=", PARA PODER COTEJARLO CON LOS BUILTS-IN (lista)
-	assignCommandName(cmds->comandos[cmds->numCommands], "=");
-	vars = strtok_r(token, "=", &saveptr); //Token es una dir de memoria
 	if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
                     // Manejar el error de asignación de memoria
             memLocateFailed();
@@ -200,16 +195,22 @@ variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO C
     cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(vars); 
     cmds->comandos[cmds->numCommands]->numArgumentos++;
 
-	vars = strtok_r(NULL, " ", &saveptr); //vars es una dir de memoria
-	if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
-        // Manejar el error de asignación de memoria
-        memLocateFailed();
-        return;
-    }
+}
 
-	// GUARDAMOS EL VALOR QUE LE VAMOS A DAR A LA VARIABLE QUE QUEREMOS CREAR COMO ARGUMENTO 1
-    cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(vars);
-	cmds->comandos[cmds->numCommands]->numArgumentos++;
+void
+variable_asig(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO UN BUILT-IN PARA SIMPLIFICAR SU PROGRAMACION
+{
+	char *vars;
+	char *saveptr;
+
+	// ASIGNAMOS EL NOMBRE DEL COMANDO COMO "=", PARA PODER COTEJARLO CON LOS BUILTS-IN (lista)
+	assignCommandName(cmds->comandos[cmds->numCommands], "=");
+	vars = strtok_r(token, "=", &saveptr); //Token es una dir de memoria
+	add_asignation_arg(vars, cmds);
+
+	vars = strtok_r(NULL, " ", &saveptr); //vars es una dir de memoria
+	add_asignation_arg(vars, cmds);
+	
 }
 
 
@@ -235,70 +236,85 @@ sust_cmd(Commands *cmds, char *token) // VAMOS A INTERPRETAR ESTE COMANDO COMO U
 
 
 char *
-sust_vars(char *token) {
-	char *vars;
-	char *saveptro;
-	
-	char *token_copy1 = strdup(token);
-	char *token_copy2 = strdup(token);
-	char *token_copy3 = strdup(token);
-	char *new_token;
+get_next_token(char *ptr, char *delimiter) {
+	return strtok(ptr, delimiter);
+}
+
+char *
+get_variable(char *found) {
 	char *variable;
 
-	char *sustituir;
-	sustituir = strtok_r(token_copy1, "/", &saveptro);
-	printf("Esta es la porcion que vamos a sustituir: %s \n", sustituir);
-
-	char *constante;
-	constante = strtok_r(token_copy3, sustituir, &saveptro);
-	printf("Esta es la porcion que quedará constante: %s \n", constante);
-
-	//Eliminamos el '$' para extraer el nombre de la variable
-	vars = strtok_r(token_copy2, "$", &saveptro);
-	printf("Variable sin delemitar: %s\n", vars);
-	//delimitamos la variable
-	vars = strtok_r(vars, "/", &saveptro);
-	printf("Variable delimitada: %s\n", vars);
-
-	//vars = strtok_r(token, vars, &saveptro);
-
-
-	variable = getenv(vars);
+	variable = getenv(found);
 	if (variable == NULL) {
-		printf("me solto nul \n");
 		variable = ""; //SI LA VARIABLE NO EXISTE SE DEJA VACIA (ESTANDARES)
 		printf("%ld\n", sizeof(variable));
+	}	
+
+	return variable;
+}
+
+void
+write_newtoken(char **new_token,char *variable, char *ptr) {
+
+	if (strcmp(variable, "") == 0) {
+		strcpy(*new_token, ptr);
+	} else {
+		strcpy(*new_token, variable);
+		strcat(*new_token, "/");
+		strcat(*new_token, ptr);			
 	}
 
-	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
-	if (constante != NULL) {
-		new_token = malloc(strlen(variable)+ strlen(constante)+ 1); //El 1 es del '/0'
+}
 
-		if (new_token != NULL) {
-			if (strcmp(variable, "") == 0) {
-				strcpy(new_token, constante);
-			} else {
-				strcpy(new_token, variable);
-				strcat(new_token, constante);
+char *
+remake_token(char * variable, char *ptr) {
+	char *new_token;
+	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
+		if (ptr != NULL) {
+			
+			new_token = malloc(strlen(variable)+ strlen(ptr)+ 2); //El 1 es del '/0' y otro por el "/"
+
+			if (new_token != NULL) {
+				write_newtoken(&new_token ,variable, ptr);
 				
-			}
+			} else {
+				memLocateFailed();
+			}		
+				
 		} else {
-			memLocateFailed();
+			new_token = strdup(variable);
+		}
+
+		return new_token;
+		if (ptr != NULL) {
+			free(new_token);
 		}
 		
-		
+}
+
+char *
+sust_vars(char *token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL TOKEN, Y DEJARLO INTACTO
+	
+	char *ptr = token;
+	char *found = NULL;
+	char *variable;
+	char *delimiter = "/";
+	char *new_token;
+
+	ptr = strchr(ptr, '$');
+	ptr++; //AVANCAMOS UNA POSICION, ES DECIR AL SIGUIENTE CARACTER DESPUES DE $
+	found = get_next_token(ptr, delimiter); // BUSCAMOS LA PALABRA DELIMITADA, EN CASO DE QUE HAYA ALGO DESPUES DE LA VAR
+	if (found != NULL) {
+		// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
+		ptr = ptr + (strlen(found)+1); // EL 1 ES DEL 
+		variable = get_variable(found);
+		new_token = remake_token(variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
+		return new_token;
 		
 	} else {
-		new_token = strdup(variable);
+		return "$";
 	}
 
-
-	free(token_copy1);
-	free(token_copy2);
-	free(token_copy3);
-	
-	return new_token;
-	free(new_token);
 }
 
 // ------------------------------ FIN DE ASIGNACION Y SUSTITUCION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
@@ -333,27 +349,7 @@ check_glob(char *token, glob_t *glob_result) {
 	return_value = glob(token, 0, NULL, glob_result);
 	
 	return return_value;
-	/*
-	if (return_value == 0) { // SIGNIFICA QUE GLOB HA FUNCIONADO BIEN, Y HA ENCONTRADO AL MENOS UNA COINCIDENCIA
-		
-		printf("valor de pathc: %ld \n", *glob_result.gl_pathc);
-		for (int i = 0; i < glob_result.gl_pathc; i++) {
-			printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
-			token = glob_result.gl_pathv[i];
-			
-		}
-		return glob_result;
-		
-		//globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
-	} else if (return_value == GLOB_NOMATCH) {
-		printf("NO se enco0ntraron archivos que coincidan con el patrón. \n"); 
-		// EN CASO DE QUE NO EXISTA SE DEVUELVE EL TOKEN SIN MODIFICAR
-		return token;
-	} else {
-		printf("Error al ejecutar glob(). \n");
-		return "";
-	}
-	*/
+	
 }
 
 // ------------------------------ FIN LOGICA PARA EL OPCIONAL III (Implementacion de globbing) ------------------------------------------------
@@ -476,6 +472,19 @@ instruction_classifier(Commands *cmds, char **token, char **saveptr) {
 }
 
 void
+envar_detector(Commands *cmds, char **token) {
+	if (strchr(*token, '$') != NULL) {
+				
+		if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
+			sust_cmd(cmds, *token);
+		}
+		*token = sust_vars(*token);
+		/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
+
+	}
+}
+
+void
 tokenizator(char *line, Commands *cmds) 
 {
     
@@ -502,15 +511,8 @@ tokenizator(char *line, Commands *cmds)
 		if (token != NULL) {
 
 			// ......... Codigo destinado a la sustitucion de ENV VARS ..........................
-			if (strchr(token, '$') != NULL) {
-				
-				if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
-					sust_cmd(cmds, token);
-				}
-				token = sust_vars(token);
-				/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
-
-			}
+			envar_detector(cmds, &token);
+			
 			// ...............................................................
 
 			// ......... Codigo destinado al globbing ..........................
@@ -559,36 +561,12 @@ read_lines(Commands *cmds)
 
 	malloc_check(line);
 
-	
-
 	printf("background %d\n", cmds->background);
 
 	//if (cmds->background == 0) {
 	fgets(line, LINE_BUFFER_SIZE, stdin);
 	line = clean_line(line, '\n');
 	tokenizator(line, cmds);
-
-
-	/*}
-	else {
-		while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
-
-			// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
-			line = clean_line(line);	//Limpiamos line porque alfinal tiene un '\n'
-				//printf("The line: %s \n", line);
-			tokenizator(line, cmds);
-				//create_files(line, status);
-
-		}
-
-		if (!feof(stdin)) {
-		// Llegamos al final de la entrada estándar
-		errx(EXIT_FAILURE, "eof not reached");
-		}
-	}
-	*/
-	
-
 
 
 	free(line);
@@ -1064,7 +1042,7 @@ exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
 
 	} else
 	{
-		printf("%s", variable);
+		printf("%s \n", variable);
 
 	}
 

@@ -57,8 +57,7 @@ struct Commands {
 
 typedef struct Commands Commands;
 
-
-
+Commands Comandos;
 // ----------------------- FIN DE ESTRUCTURAS DE DATOS UTILIZADAS --------------------------------------------------------------------------------------
 
 // ------------------------ ALGUNAS ACCIONES BÁSICAS -----------------------------------------------------------------------------------------
@@ -126,12 +125,43 @@ reserve_args(Command *cmd)
 
 }
 
+void
+check_empty_name(Command *cmd) {
+	if (cmd->nombre != NULL) { //ESTA COMPROBACION ES UTIL PARA LA LOGICA DE IFOK E IFNOT
+		free(cmd->nombre);
+	}
+	cmd->nombre = NULL;
+}
+
+void
+check_empty_path(Command *cmd) {
+	if (cmd->path != NULL) { //ESTA COMPROBACION ES UTIL PARA LA LOGICA DE IFOK E IFNOT
+		free(cmd->path);
+	}
+	cmd->path = NULL;
+}
+
+
 
 void
 assignCommandName(Command *cmd, char *name)
-{
+{	
+	check_empty_name(cmd);
 	cmd->nombre = strdup(name);
 }
+
+void
+assignCommandPath(Command *cmd, char *path) {
+	check_empty_path(cmd);
+	cmd->path = strdup(path);
+}
+
+void
+assignCommandArg(Command *cmd, char *arg) {
+	cmd->argumentos[cmd->numArgumentos] = strdup(arg);
+}
+
+
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMAND ----------------------------------------------------------------------
 
 
@@ -154,8 +184,11 @@ reserve_commands(Commands *cmds) //GESTIONA LA LISTA QUE CONTENDRÁ LOS PUNTEROS
 {
 
 	cmds->comandos = realloc(cmds->comandos, (cmds->numCommands + 1) * sizeof(Command *)); //Reserva memoria para una lista de numCOmmands+1 punteros a Commands
+	//cmds->comandos[cmds->numCommands] = malloc(sizeof(Command)); // Reservamos memoria para el comando en cuestion
 	cmds->comandos[cmds->numCommands] = malloc(sizeof(Command)); // Reservamos memoria para el comando en cuestion
+
 	initializerCommand(cmds->comandos[cmds->numCommands]); //Inicializamos el comando con los valores predetermiandos
+	
 	// RESERVAMOS LA MEMORIA DEL COMANDO EN CUESTION
 	
 	return cmds->comandos; //Retorna la dir de la lista que contiene las direcciones a los comandos
@@ -179,6 +212,33 @@ setLastArgumentNull(Command *cmd)
 
 
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMANDS -----------------------------------------------------------------------------
+// ----------------------- FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
+
+void free_command(Command *cmd) {
+    free(cmd->nombre);
+    free(cmd->path);
+    free(cmd->salida);
+    free(cmd->entrada);
+    free(cmd->here);
+    
+    for (int i = 0; i < cmd->numArgumentos; i++) {
+
+		free(cmd->argumentos[i]);
+		
+        
+    }
+    free(cmd->argumentos);
+    free(cmd);
+}
+
+void free_commands(Commands *cmds) {
+    for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+        free_command(cmds->comandos[numCommand]);
+    }
+    free(cmds->comandos);
+}
+
+// ----------------------- FIN DE FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
 
 // ------------------------------ ASIGNACION Y SUSTITUCION DE VARIABLES DE ENTORNO (COMANDO ESPECIAL) ---------------------------------------------------------------------------
 
@@ -272,7 +332,7 @@ remake_token(char **new_token, char * variable, char *ptr) {
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
 		if (strcmp(ptr, "") != 0) {
 			
-			*new_token = malloc(strlen(variable)+ strlen(ptr)+ 2); //El 1 es del '/0' y otro por el "/"
+			*new_token = malloc(strlen(variable)+ strlen(ptr)); //El 1 es del '/0' y otro por el "/"
 
 			if (*new_token != NULL) {
 				write_newtoken(*&new_token ,variable, ptr);
@@ -284,7 +344,7 @@ remake_token(char **new_token, char * variable, char *ptr) {
 		} else {
 			*new_token = strdup(variable);
 		}
-
+		
 /*
 		if (ptr != NULL) {
 			free(new_token);
@@ -294,28 +354,39 @@ remake_token(char **new_token, char * variable, char *ptr) {
 }
 
 void
-sust_vars(char **token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL TOKEN, Y DEJARLO INTACTO
+sust_vars(char **token, char **new_token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL TOKEN, Y DEJARLO INTACTO
 	
 	char *ptr = *token;
 	char *found = NULL;
 	char *variable;
 	char *delimiter = "/";
-	char *new_token;
+	//char *new_token;
 
 	ptr = strchr(ptr, '$');
 	ptr++; //AVANCAMOS UNA POSICION, ES DECIR AL SIGUIENTE CARACTER DESPUES DE $
 	found = get_next_token(ptr, delimiter); // BUSCAMOS LA PALABRA DELIMITADA, EN CASO DE QUE HAYA ALGO DESPUES DE LA VAR
 	if (found != NULL) {
+		
 		// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
 		ptr = ptr + (strlen(found)+1); // EL 1 ES DEL 
 		variable = get_variable(found);
-		remake_token(&new_token, variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
-		*token = strdup(new_token);
-		free(new_token);
+		remake_token(&*new_token, variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
+
+        //free(*token);
+		printf("valor actual de token: %s.\n", *token);
+		//free(*token);
+		
+		//**token = *new_token; //ASIGNAMOS DIRECTAMENTE EL STRING, NO TRABAJAMOS CON DIRS DE MEMORIA
+		printf("valor actual de token: %s.\n", *token);
+		
 		
 	} else {
-		*token = "$";
+		//free(*token);
+		*new_token = strdup("$");
 	}
+
+	
+	
 
 }
 
@@ -367,11 +438,14 @@ first_optional(Commands *cmds) {
 	malloc_check(linea);
 
 	char *here_string = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
-			
+	malloc_check(here_string);		
+
+	//HAY QUE TENER EN CUENTA QUE linea NO ME AÑADE \O, solo \n
+	here_string[0] = '\0'; //INICIALIZAMOS EL STRING CON UNA CADENA VACIA PARA ASEGURARSE DE QUE TENGA CARCTER NULO DE TERMINACION
 
 	do {
 		fgets(linea, LINE_BUFFER_SIZE, stdin);
-		here_string = (char *)realloc(here_string,sizeof(here_string)+ sizeof(linea));	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+		here_string = (char *)realloc(here_string,sizeof(here_string)+ sizeof(linea) +1);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea, el 1 es por \0
 		strcat(here_string, linea);
 	} while (strchr(linea, '}') == NULL); //MIENTRAS QUE NO ENCONTREMOS EL FIN DE HERE{} SEGUIMOS LEYENDO
 
@@ -435,8 +509,8 @@ instruction_regular(Commands *cmds, char **token) {
 			// Manejar el error de asignación de memoria
 			memLocateFailed();
 			return;
-		}		
-		cmds->comandos[cmds->numCommands]->argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] = strdup(*token);	
+		}
+		assignCommandArg(cmds->comandos[cmds->numCommands], *token);		
 		cmds->comandos[cmds->numCommands]->numArgumentos++;	
 	} else {	
 		assignCommandName(cmds->comandos[cmds->numCommands], *token);
@@ -473,21 +547,27 @@ instruction_classifier(Commands *cmds, char **token, char **saveptr) {
 	// FIN DE METER EN OTRA FUNCION -------------------------------------------------------
 }
 
-void
-envar_detector(Commands *cmds, char **token) {
+int
+envar_detector(Commands *cmds, char **token, char *saveptr) {
+	char *new_token;
 	if (strchr(*token, '$') != NULL) {
 				
 		if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
 			sust_cmd(cmds, *token);
 		}
-		sust_vars(*&token);
+		sust_vars(*&token, &new_token);
+		printf("EL nuevo token es: %s \n", new_token);
+		instruction_classifier(cmds, &new_token, &saveptr);
 		/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
-
+		free(new_token);
+		return 1;
+	} else {
+		return 0;
 	}
 }
 
 void
-globbing_detector(Commands *cmds, char *token, char *saveptr) {
+globbing_classifier(Commands *cmds, char *token, char *saveptr) {
 	glob_t glob_result; // ES UN STRUCT, QUE CONTIENE LOS CAMPOS gl_pathc y gl_pathv
 				
 	int patterns_found = check_glob(token, &glob_result);
@@ -497,12 +577,23 @@ globbing_detector(Commands *cmds, char *token, char *saveptr) {
 			token = glob_result.gl_pathv[i];
 			instruction_classifier(cmds, &token, &saveptr);
 		}
-	} else {
-		instruction_classifier(cmds, &token, &saveptr);
-	}
+		
+	} 
 	globfree(&glob_result);// LIBEREAMOS MEMORIA UTILIZADA POR glob_result
 				
 }
+
+int
+glob_detector(Commands *cmds, char **token, char *saveptr) {
+	if (is_glob(*token) != 0) {
+				
+		globbing_classifier(cmds, *token, saveptr);
+		return 1;		
+	} else {
+		return 0;
+	}	
+}
+
 
 void
 tokenizator(char *line, Commands *cmds) 
@@ -510,6 +601,7 @@ tokenizator(char *line, Commands *cmds)
     
 	char *token;
 	char *saveptr;
+
 	
 	//SETEAMOS EL PRIMER COMANDO
 	if (reserve_commands(cmds) == NULL) {
@@ -529,25 +621,15 @@ tokenizator(char *line, Commands *cmds)
 
 		if (token != NULL) {
 
-			// ......... Codigo destinado a la sustitucion de ENV VARS ..........................
-			envar_detector(cmds, &token);
-			// ...............................................................
-			// ......... Codigo destinado al globbing ..........................	
-	
-			if (is_glob(token) != 0) {
-				
-				globbing_detector(cmds, token, saveptr);
-				
-			} else {
+			if ((envar_detector(cmds, &token, saveptr) || glob_detector(cmds, &token, saveptr)) == 0) {
 				instruction_classifier(cmds, &token, &saveptr);
-			}		
-			// ...............................................................
+			}
         }
     }
 	
     setLastArgumentNull(cmds->comandos[cmds->numCommands]);
-	
     cmds->numCommands++;
+	free(token);
 }
 
 
@@ -564,12 +646,29 @@ read_lines(Commands *cmds)
 	malloc_check(line);
 
 	printf("background %d\n", cmds->background);
-
+	/*
 	//if (cmds->background == 0) {
 	fgets(line, LINE_BUFFER_SIZE, stdin);
 	line = clean_line(line, '\n');
-	tokenizator(line, cmds);
+	if (strcmp(line, "") != 0) {
+		tokenizator(line, cmds);
+	}
+	*/
+	while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
 
+		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
+		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
+		if (strcmp(line, "") != 0) {
+			tokenizator(line, cmds);
+		}
+
+	}
+
+	if (!feof(stdin)) {
+		// Llegamos al final de la entrada estándar
+		errx(EXIT_FAILURE, "eof not reached");
+
+	}
 
 	free(line);
 
@@ -644,7 +743,8 @@ searchin_pwd(Command *cmd)
 		//char *full_path = strcat(actual_dir,"/");
 		char *full_path = strcat(actual_dir,cmd->nombre);
 
-		cmd->path = strdup(full_path); //HACEMOS UNA COPIA Y ASIGNAMOS (AHORA YA PODEMOS LIBERAR EL ORIGINAL)
+		assignCommandPath(cmd, full_path);
+		//cmd->path = strdup(full_path); //HACEMOS UNA COPIA Y ASIGNAMOS (AHORA YA PODEMOS LIBERAR EL ORIGINAL)
 		//create_path(); // CREA UN PATH CON LA RUTA, Y AL FINAL EL NOMBRE DEL ARCHIVO CONCATENADO
 		free(actual_dir); //LIBERAMOS EL ORIGINAL
 		free(full_path);
@@ -660,11 +760,16 @@ searchin_pwd(Command *cmd)
 int 
 is_builtin(Command *cmd) { // Si es un built-in devuelve la 1
 	int found = 0;
-
 	for (int i = 0; builtin_cmds[i] != NULL; i++) {
 		if(strcmp(cmd->nombre, builtin_cmds[i]) == 0) {
 			found = 1; //ES UN COMANDO BUILT IN
+			if (cmd->path != NULL) {
+				free(cmd->path); //SI PATH YA TENIA MEMORIA ASIGNADA, LA LIBERAMOS ANTES DE REDEFINIRLA PARA NO CAUSAR UN LEAK
+			}
+
 			cmd->path = strdup("built-in");
+		
+			
 		}  
 	}
 	return found; //ES BUILT IN
@@ -688,7 +793,7 @@ void
 search_paths(Commands *cmds) {
 
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
-		printf("-------- BUSCANDO EJECUTABLES DE %s -----------\n", cmds->comandos[numCommand]->nombre);
+		//printf("-------- BUSCANDO EJECUTABLES DE %s -----------\n", cmds->comandos[numCommand]->nombre);
 		//searchin_builtins();
 		search_path(cmds->comandos[numCommand]);
 	}
@@ -705,7 +810,7 @@ fd_setter(Command *cmd, int* fd_in, int* fd_out) // ESTA FUNCION REALIZA LAS RED
 {
 
 	if (cmd->entrada != NULL) {
-		printf("Se ha cambiado la entrada \n");
+		//printf("Se ha cambiado la entrada \n");
 		*fd_in= open(cmd->entrada, O_RDONLY);
 		dup2(*fd_in, STDIN_FILENO);
 	} else {
@@ -719,8 +824,6 @@ fd_setter(Command *cmd, int* fd_in, int* fd_out) // ESTA FUNCION REALIZA LAS RED
 	} else {
 		*fd_out = STDOUT_FILENO;
 	}
-
-	
 
 }
 
@@ -861,7 +964,7 @@ execute_pipe(Commands *cmds)
 				close(pipes[numCommand][1]);	// Cierra el extremo de escritura del pipe actual
 			}
 
-			
+	
 		}
 	}
 
@@ -871,7 +974,7 @@ execute_pipe(Commands *cmds)
 		for (int i = 0; i < cmds->numCommands; i++) {
 			int status;
 			wait(&status);	
-			printf("Pipe %d executed\n", i);
+			//printf("Pipe %d executed\n", i);
 
 			// ........... ENV VAR result (se seteará el ultimo valor)................
 			char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
@@ -888,7 +991,13 @@ execute_pipe(Commands *cmds)
 		}
 	}
 
-	printf("Pipe executing in background\n");
+	// ------------ LIBEREMOS MEMORIA ASIGNADA A LOS PIPES ----------------------------
+	for (int pipe = 0; pipe < cmds->numCommands-1; pipe++) {
+		free(pipes[pipe]);
+	}
+	free(pipes);
+	// ---------------------------------------------------------------------------
+	//printf("Pipe executing in background\n");
 }
 
 
@@ -960,7 +1069,7 @@ exec_cmd(Command *cmd, int background)
 			if (background == 0) {
 				int status;
 				wait(&status);
-				printf("Command executed\n");
+				//printf("Command executed\n");
 				// ............ ENV VAR "result" ..................
 				char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
 				if (WIFEXITED(status)) {
@@ -975,7 +1084,7 @@ exec_cmd(Command *cmd, int background)
 				// ............................................
 			}
 
-			printf("Command executing in background\n");
+			//printf("Command executing in background\n");
 			
 		}
 	} else {
@@ -1058,7 +1167,6 @@ exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
 	} else
 	{
 		printf("%s \n", variable);
-
 	}
 
 	// ............. Definimos env var "result" .....................
@@ -1071,34 +1179,33 @@ exec_sust(Command *cmd) { // EN CASO DE COMANDO: Ej: $PATH PATH: ARG[0]
 void 
 remake_cmd(Command *cmd, int * background) { // FUNCION UTILIZADA PARA IFOK E IFNOT
 	// Tenemos que rehacer el comando para pasarselo al ejecutador de comandos.
-	cmd->path = NULL;
 	
-	cmd->nombre = cmd->argumentos[1];
+	check_empty_path(cmd);
+
+	assignCommandName(cmd, cmd->argumentos[1]);
 
 	for (int i = 1; i < cmd->numArgumentos; i++) {
 		if (strcmp(cmd->argumentos[i], "&") == 0) {
 			*background = 1;
 		}
-		cmd->argumentos[i-1] = cmd->argumentos[i];
-				
+		if (cmd->argumentos[i-1] != NULL) {
+			free(cmd->argumentos[i-1]);
+		}
+		cmd->argumentos[i-1] = strdup(cmd->argumentos[i]);			
 	}
-
-	cmd->numArgumentos = cmd->numArgumentos -1;
-	printf("%s \n",cmd->nombre);
-	for (int i = 0; i < cmd->numArgumentos; i++) {
-		printf("args: %s \n", cmd->argumentos[i]);
-				
-	}
-	setLastArgumentNull(cmd);
 	
+	cmd->numArgumentos = cmd->numArgumentos -1;
+	free(cmd->argumentos[cmd->numArgumentos]); // LA LIBERACIONSE HACE DESPUES, RECUERDA QUE LOS ARGUMENTOS VAN DE 0 A numArg -1
+
+	setLastArgumentNull(cmd);
 }
 
 void
 exec_ifok(Command *cmd) {
 
 	char * prev_status = getenv("result");
-	printf("este es el valor de prev: %s \n", prev_status);
-
+	//printf("este es el valor de prev: %s \n", prev_status);
+	
 	if (prev_status == NULL) {
 		printf("There's no a prev command status. \n");
 	} else {
@@ -1197,50 +1304,6 @@ exec_cmds(Commands *cmds)
 // ----------------------- FIN LOGICA DE EJECUCIÓN DE COMANDOS ----------------------------------------------------------------------------------
 
 
-// ----------------------- FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
-void
-free_command(Commands *cmds)
-{
-	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
-		free(cmds->comandos[numCommand]->nombre);
-		free(cmds->comandos[numCommand]->path);
-
-		if (cmds->comandos[numCommand]->salida != NULL) {
-			free(cmds->comandos[numCommand]->salida);
-		}
-
-		if (cmds->comandos[numCommand]->entrada != NULL) {
-			free(cmds->comandos[numCommand]->entrada);
-		}
-
-		if (cmds->comandos[numCommand]->here != NULL) {
-			free(cmds->comandos[numCommand]->here);
-		}
-
-		for (int i = 0; i < cmds->comandos[numCommand]->numArgumentos; i++) {
-			free(cmds->comandos[numCommand]->argumentos[i]);
-		}
-		free(cmds->comandos[numCommand]->argumentos);
-		free(cmds->comandos[numCommand]);
-	}
-}
-
-void
-free_commands(Commands *cmds)
-{
-
-	free(cmds->comandos);
-
-}
-
-void
-free_mem(Commands *cmds)
-{
-	free_command(cmds);
-	free_commands(cmds);
-}
-
-// ----------------------- FIN DE FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
 
 void 
 commands_printer(Commands *cmds) {
@@ -1260,48 +1323,128 @@ commands_printer(Commands *cmds) {
 }
 
 
+void sigint_handler(int signum) {
+    printf("\nSeñal SIGINT (Ctrl+C) recibida. Liberando memoria...\n");
+    free_commands(&Comandos); // Asegúrate de que Comandos sea visible aquí
+    exit(atoi(getenv("result")));
+}
+
 int
 main(int argc, char *argv[])
 {
 
-    Commands Comandos;
+    //Commands Comandos;
     
 
     if (argc > 1) {
         err(EXIT_FAILURE, "No arguments needed.");
     }
 
-	
+	/*
 	do {
 		
 		if (Comandos.background == 1) {
 			printf("Limpiando comandos \n");
 			free_commands(&Comandos);
 		}
+
+
+		// Configurar el manejador de señales para SIGINT
+		if (signal(SIGINT, sigint_handler) == SIG_ERR) {
+			perror("Error al configurar el manejador de señales");
+			return EXIT_FAILURE;
+		}
 		
+		printf("traza1\n");
 		initializerCommands(argv, &Comandos);
-	
+		printf("traza2\n");
 		//Comandos.background = 0;
 		read_lines(&Comandos);
-		
-	
-		search_paths(&Comandos);
+		printf("traza2\n");
+		if (Comandos.numCommands > 0) {
+			search_paths(&Comandos);
 
-	
-		commands_printer(&Comandos);
+			printf("traza3\n");
+			commands_printer(&Comandos);
+			
+			printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
+			exec_cmds(&Comandos);
+			//free_commands(&Comandos);
+		}
 		
-		printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
-		exec_cmds(&Comandos);
-		//free_commands(&Comandos);
 		
 		
 	} while (1);	
 	//} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
-        //free_command(&Comandos);
-        //free_command(&Comandos);
+
 	printf("\n");
+	printf("-----------------------------------------------------------------------------------------------------------------------\n");
+
     free_commands(&Comandos);
 	
+
+		char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+
+	malloc_check(line);
+
+	printf("background %d\n", cmds->background);
+	*/
+	/*
+	//if (cmds->background == 0) {
+	fgets(line, LINE_BUFFER_SIZE, stdin);
+	line = clean_line(line, '\n');
+	if (strcmp(line, "") != 0) {
+		tokenizator(line, cmds);
+	}
+	*/
+
+	char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+
+	malloc_check(line);
+	
+	while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
+
+		/*if (Comandos.background == 1) {
+			printf("Limpiando comandos \n");
+			free_commands(&Comandos);
+		}*/
+		
+		if(Comandos.numCommands > 0) {
+			free_commands(&Comandos);
+			initializerCommands(argv, &Comandos);
+		}
+		
+		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
+		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
+		if (strcmp(line, "") != 0) {
+			tokenizator(line, &Comandos);
+
+
+			if (Comandos.numCommands > 0) {
+			search_paths(&Comandos);
+
+			
+			//commands_printer(&Comandos);
+			
+			//printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
+			exec_cmds(&Comandos);
+			//free_commands(&Comandos);
+			}
+		}
+
+	}
+
+	if (!feof(stdin)) {
+		// Llegamos al final de la entrada estándar
+		errx(EXIT_FAILURE, "eof not reached");
+
+	}
+
+	free(line);
+
+
+	free_commands(&Comandos);
+
    	exit(atoi(getenv("result")));
     return 0;
 

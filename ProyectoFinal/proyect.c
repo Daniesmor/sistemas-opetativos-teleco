@@ -307,7 +307,7 @@ get_variable(char *found) {
 	variable = getenv(found);
 	if (variable == NULL) {
 		variable = ""; //SI LA VARIABLE NO EXISTE SE DEJA VACIA (ESTANDARES)
-		printf("%ld\n", sizeof(variable));
+		//printf("%ld\n", sizeof(variable));
 	}	
 
 	return variable;
@@ -373,11 +373,11 @@ sust_vars(char **token, char **new_token) { //SE ENCARGA DE SUSTITUIR UNA VARIAB
 		remake_token(&*new_token, variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
 
         //free(*token);
-		printf("valor actual de token: %s.\n", *token);
+		//printf("valor actual de token: %s.\n", *token);
 		//free(*token);
 		
 		//**token = *new_token; //ASIGNAMOS DIRECTAMENTE EL STRING, NO TRABAJAMOS CON DIRS DE MEMORIA
-		printf("valor actual de token: %s.\n", *token);
+		//printf("valor actual de token: %s.\n", *token);
 		
 		
 	} else {
@@ -520,13 +520,12 @@ instruction_regular(Commands *cmds, char **token) {
 
 void
 instruction_classifier(Commands *cmds, char **token, char **saveptr) {
-// METER EN OTRA FUNCION -------------------------------------------------------
+
     if (strcmp(*token, "|") == 0) {
 		instruction_pipe(cmds, token, saveptr);
     } else if (strcmp(*token, ">") == 0) {
         // Redirección de salida
 		instruction_output_redirection(cmds, token, saveptr);
-        
     } else if (strcmp(*token, "<") == 0) {
         // Redirección de entrada
 		instruction_input_redirection(cmds, token, saveptr);
@@ -544,7 +543,6 @@ instruction_classifier(Commands *cmds, char **token, char **saveptr) {
 
     }
 
-	// FIN DE METER EN OTRA FUNCION -------------------------------------------------------
 }
 
 int
@@ -556,7 +554,7 @@ envar_detector(Commands *cmds, char **token, char *saveptr) {
 			sust_cmd(cmds, *token);
 		}
 		sust_vars(*&token, &new_token);
-		printf("EL nuevo token es: %s \n", new_token);
+		//printf("EL nuevo token es: %s \n", new_token);
 		instruction_classifier(cmds, &new_token, &saveptr);
 		/* EL TOKEN YA TIENE LA VARIABLE SUSTITUIDA */
 		free(new_token);
@@ -629,8 +627,60 @@ tokenizator(char *line, Commands *cmds)
 	
     setLastArgumentNull(cmds->comandos[cmds->numCommands]);
     cmds->numCommands++;
-	free(token);
+	//free(token);
 }
+
+// ------------------------------ FUNCIONES DEDICADAS A FORMATEAR LA ENTRADA ANTES DE PASARLA AL TOKENIZADOR --------------------------
+
+void
+rewrite_line(char *line, char *nuevoString) {
+	int a = 0;
+    int b = 0;
+
+    while (line[a] != '\0') {
+        if (line[a] == '|' || line[a] == '<' || line[a] == '>') {
+            nuevoString[b] = ' ';
+			b++;
+            nuevoString[b] = line[a];
+			b++;
+			a++;
+            nuevoString[b] = ' ';
+			b++;
+        } else {
+            nuevoString[b] = line[a];
+			b++;
+			a++;
+        }
+    }
+
+    nuevoString[b] = '\0';
+}
+
+
+void formatter(char *line, Commands *cmds) {
+    int longitud = strlen(line);
+
+    char *nuevoString = (char *)malloc((2 * longitud + 1) * sizeof(char));
+    if (nuevoString == NULL) {
+        memLocateFailed();
+        return;
+    }
+
+	rewrite_line(line, nuevoString);
+
+    //printf("strlen de line: %d \n", longitud);
+    //printf("strlen de nuevostring: %ld \n", strlen(nuevoString));
+
+    if (nuevoString != NULL) {
+        //printf("Nuevo string: %s \n", nuevoString);
+        tokenizator(nuevoString, cmds);
+        free(nuevoString);
+    } else {
+        memLocateFailed();
+    }
+}
+
+// ------------------------FIN DE FUNCIONES DEDICADAS A FORMATEAR LA ENTRADA ANTES DE PASARLA AL TOKENIZADOR --------------------------
 
 
 // ----------------------- FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
@@ -659,7 +709,7 @@ read_lines(Commands *cmds)
 		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
 		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
 		if (strcmp(line, "") != 0) {
-			tokenizator(line, cmds);
+			formatter(line, cmds);
 		}
 
 	}
@@ -1137,11 +1187,9 @@ exec_asig(Command *cmd) {
 
 	// Acceder al valor de la variable de entorno
     char *env_value = getenv(cmd->argumentos[0]);
-    if (env_value != NULL) {
-        printf("Valor de MY_VARIABLE: %s\n", env_value);
-    } else {
-        printf("MY_VARIABLE no está definida\n");
-    }
+    if (env_value == NULL) {
+        printf("%s not defined.\n", cmd->argumentos[0]);
+    } 
 
 
 	// ............. Definimos env var "result" .....................
@@ -1417,7 +1465,7 @@ main(int argc, char *argv[])
 		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
 		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
 		if (strcmp(line, "") != 0) {
-			tokenizator(line, &Comandos);
+			formatter(line, &Comandos);
 
 
 			if (Comandos.numCommands > 0) {

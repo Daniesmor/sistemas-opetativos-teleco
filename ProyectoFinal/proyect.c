@@ -57,7 +57,7 @@ struct Commands {
 
 typedef struct Commands Commands;
 
-Commands Comandos;
+//Commands Comandos;
 // ----------------------- FIN DE ESTRUCTURAS DE DATOS UTILIZADAS --------------------------------------------------------------------------------------
 
 // ------------------------ ALGUNAS ACCIONES BÁSICAS -----------------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ assignCommandArg(Command *cmd, char *arg) {
 // ---------------------------- GESTION DEL STRUCT COMMANDS ------------------------------------------------------------------------------------
 
 void
-initializerCommands(char *argv[], Commands *cmds)
+initializerCommands(Commands *cmds)
 {
 	
 	cmds->numCommands = 0;
@@ -316,6 +316,8 @@ get_variable(char *found) {
 void
 write_newtoken(char **new_token,char *variable, char *ptr) {
 
+	//*new_token[0] = '\0'; //INICIALIZAMOS EL STRING CON UNA CADENA VACIA PARA ASEGURARSE DE QUE TENGA CARCTER NULO DE TERMINACION
+
 	if (strcmp(variable, "") == 0) {
 		strcpy(*new_token, ptr);
 	} else {
@@ -328,11 +330,12 @@ write_newtoken(char **new_token,char *variable, char *ptr) {
 
 void
 remake_token(char **new_token, char * variable, char *ptr) {
-	
+	printf("valor de ptr %s \n", ptr);
+
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
-		if (strcmp(ptr, "") != 0) {
+		
 			
-			*new_token = malloc(strlen(variable)+ strlen(ptr)); //El 1 es del '/0' y otro por el "/"
+			*new_token = malloc(strlen(variable)+ strlen(ptr) +2); //El 1 es del '/0' y otro por el "/"
 
 			if (*new_token != NULL) {
 				write_newtoken(*&new_token ,variable, ptr);
@@ -341,50 +344,58 @@ remake_token(char **new_token, char * variable, char *ptr) {
 				memLocateFailed();
 			}		
 				
-		} else {
-			*new_token = strdup(variable);
-		}
+}
 		
 /*
 		if (ptr != NULL) {
 			free(new_token);
 			printf("se ha ejecutado esto?\n");
 		}*/
+
+	
 		
-}
+
 
 void
 sust_vars(char **token, char **new_token) { //SE ENCARGA DE SUSTITUIR UNA VARIABLE DE ENTORNO EN EL TOKEN, Y DEJARLO INTACTO
 	
-	char *ptr = *token;
+	char *ptr;
 	char *found = NULL;
 	char *variable;
 	char *delimiter = "/";
 	//char *new_token;
 
-	ptr = strchr(ptr, '$');
-	ptr++; //AVANCAMOS UNA POSICION, ES DECIR AL SIGUIENTE CARACTER DESPUES DE $
-	found = get_next_token(ptr, delimiter); // BUSCAMOS LA PALABRA DELIMITADA, EN CASO DE QUE HAYA ALGO DESPUES DE LA VAR
-	if (found != NULL) {
-		
-		// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
-		ptr = ptr + (strlen(found)+1); // EL 1 ES DEL 
-		variable = get_variable(found);
-		remake_token(&*new_token, variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
+	
+	
+		ptr = strchr(*token, '$');
+		ptr++; //AVANCAMOS UNA POSICION, ES DECIR AL SIGUIENTE CARACTER DESPUES DE $
+		found = get_next_token(ptr, delimiter); // BUSCAMOS LA PALABRA DELIMITADA, EN CASO DE QUE HAYA ALGO DESPUES DE LA VAR
+		if (found != NULL) {
 
-        //free(*token);
-		//printf("valor actual de token: %s.\n", *token);
-		//free(*token);
-		
-		//**token = *new_token; //ASIGNAMOS DIRECTAMENTE EL STRING, NO TRABAJAMOS CON DIRS DE MEMORIA
-		//printf("valor actual de token: %s.\n", *token);
-		
-		
-	} else {
-		//free(*token);
-		*new_token = strdup("$");
-	}
+			// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
+			ptr = ptr + (strlen(found)); // NOS SITUAMOS INMEDIATAMENTE DESPUES DEL LA VARIABLE A SUSTITUIR
+			variable = get_variable(found);
 
+
+			if (*ptr == '\0') {
+				*new_token = strdup(variable);
+			} else {
+				remake_token(&*new_token, variable, ptr); //RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
+			}
+
+			/* DOCUMENTACION RAPIDA DE FUNCIONAMIENTO
+			Coge el token, busca cual es la variable que hay que sustituior (found), una vez
+			encontrada se suma al valor de la posicion de memoria de ptr, y comprobamos 
+			si despues de la variable habia mas texto, en cuyo caso se sustituye y se 
+			reescribe el token, en caso contrario se copia la dir de la variable ya encontrada. */
+			
+			
+		} else {
+			//free(*token);
+			*new_token = strdup("$");
+		}
+		
+	
 	
 	
 
@@ -430,6 +441,43 @@ check_glob(char *token, glob_t *glob_result) {
 
 
 // ------------------------------- LOGICA PARA EL OPCIONAL I (IMPLEMENTACION DE HERE{}) ------------------------------------------------------------
+
+void
+create_here_pipes(Command *cmd, int pipe_here[2]) {
+	if (cmd->here != NULL) {
+			
+		// Crear un pipe
+		if (pipe(pipe_here) == -1) {
+			perror("pipe");
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
+void
+close_here_child_pipes(Command *cmd, int pipe_here[2], int input) {
+	if (cmd->here != NULL) {
+				close(pipe_here[1]); // CERRAMOS EL EXTREMO DE ESCRITURA DEL PIPE, YA QUE LEEMOS EL HERE{} DEL PADRE
+				
+				// Redirigir la entrada estándar al extremo de lectura del pipe
+				if (dup2(pipe_here[0], input) == -1) { // REDIRIGIMOS LA ENTRADA ESTANDAR AL EXTREMO DE ESCRITURA DEL PIPE
+					perror("dup2");
+					exit(EXIT_FAILURE);
+				}
+
+				close(pipe_here[0]); // UNA VEZ DUPLICADO CON DUP2, CERRAMOS EL EXTREMO DE LECTURA TB
+			}
+}
+
+void
+close_here_father_pipes(Command *cmd, int pipe_here[2]) {
+	if (cmd->here != NULL) {
+				close(pipe_here[0]);
+				// Escribir la cadena en el extremo de escritura del pipe
+				write(pipe_here[1], cmd->here, strlen(cmd->here)); // ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
+				close(pipe_here[1]); // UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
+			}
+}
 
 void
 first_optional(Commands *cmds) {
@@ -608,6 +656,8 @@ tokenizator(char *line, Commands *cmds)
 
 		return;
 	}
+
+
 		
 	token = strtok_r(line, " ", &saveptr); //Token es una dir de memoria
 
@@ -627,7 +677,7 @@ tokenizator(char *line, Commands *cmds)
 	
     setLastArgumentNull(cmds->comandos[cmds->numCommands]);
     cmds->numCommands++;
-	//free(token);
+
 }
 
 // ------------------------------ FUNCIONES DEDICADAS A FORMATEAR LA ENTRADA ANTES DE PASARLA AL TOKENIZADOR --------------------------
@@ -683,47 +733,6 @@ void formatter(char *line, Commands *cmds) {
 // ------------------------FIN DE FUNCIONES DEDICADAS A FORMATEAR LA ENTRADA ANTES DE PASARLA AL TOKENIZADOR --------------------------
 
 
-// ----------------------- FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
-
-
-
-void
-read_lines(Commands *cmds)
-{
-
-	char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
-
-	malloc_check(line);
-
-	printf("background %d\n", cmds->background);
-	/*
-	//if (cmds->background == 0) {
-	fgets(line, LINE_BUFFER_SIZE, stdin);
-	line = clean_line(line, '\n');
-	if (strcmp(line, "") != 0) {
-		tokenizator(line, cmds);
-	}
-	*/
-	while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
-
-		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
-		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
-		if (strcmp(line, "") != 0) {
-			formatter(line, cmds);
-		}
-
-	}
-
-	if (!feof(stdin)) {
-		// Llegamos al final de la entrada estándar
-		errx(EXIT_FAILURE, "eof not reached");
-
-	}
-
-	free(line);
-
-}
-// ----------------------- FIN DE FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
 
 // ----------------------- FUNCIONES DEDICADAS A LA BUSCADA DE EJECUTABLES EN DIFERENTES PATHS -------------------------------------------------------
 
@@ -905,10 +914,32 @@ sigchld_handler()
 // ----------------------- FIN DE LOGICA PARA SEÑALES -------------------------------------------------------------------------------------
 
 // ------------------------ EJECUCION DE PIPES Y COMANDOS INDIVIDUALES ---------------------------------------------------------------------
+
+void
+wait_single_child() {
+	int status;
+				wait(&status);
+				//printf("Command executed\n");
+				// ............ ENV VAR "result" ..................
+				char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
+				if (WIFEXITED(status)) {
+					//printf("Estado de salida del hijo: %d\n", WEXITSTATUS(status));
+					// ......... Para env var "result" .....................
+					sprintf((char *)wexit, "%d", WEXITSTATUS(status)); // Convierte el entero a cadena
+					setenv("result", wexit, 1);
+					// .........................................................
+				} else {
+					err(EXIT_FAILURE, "The child ended unnormally");
+				}
+				// ............................................
+}
+
+
+
 void
 execute_pipe(Commands *cmds)
 {
-	
+
 	int child;
 
 	int** pipes = malloc((cmds->numCommands - 1)*sizeof(int*));
@@ -1059,26 +1090,19 @@ exec_cmd(Command *cmd, int background)
 	if (cmd->path != NULL) {
 		int child;
 
+		// ............................ EN CASO DE HERE ...................
+
 		int pipe_here[2]; //CREAMOS UN PIPE QUE SE UTILIZARÁ EN CASO DE UTILIZAR EL PROTOCOLO HERE{}
-		if (cmd->here != NULL) {
-			
-			// Crear un pipe
-			if (pipe(pipe_here) == -1) {
-				perror("pipe");
-				exit(EXIT_FAILURE);
-			}
-		}
+		create_here_pipes(cmd, pipe_here); // CREAMOS LOS PIPES
+	
+		// ........................................................
 
 		// .......................... ENV VAR "result" EN CASO DE QUE & ..............................
 
 		signal(SIGCHLD, sigchld_handler); // Esta función haá que se envíe en una señal cuando un proceso hijo termine
 										// De esta forma no necesitamos hacer wait->wexistatus para saber como terminó.
 
-		
-
 		// .................................................................................................
-
-		
 
 		switch (child = fork()) {
 		case -1:
@@ -1090,17 +1114,8 @@ exec_cmd(Command *cmd, int background)
 			//printf("estoy leyendo de %d \n", fd_in);
 
 			// ......................... EN CASO DE HERE{} ................................................
-			if (cmd->here != NULL) {
-				close(pipe_here[1]); // CERRAMOS EL EXTREMO DE ESCRITURA DEL PIPE, YA QUE LEEMOS EL HERE{} DEL PADRE
-				
-				// Redirigir la entrada estándar al extremo de lectura del pipe
-				if (dup2(pipe_here[0], STDIN_FILENO) == -1) { // REDIRIGIMOS LA ENTRADA ESTANDAR AL EXTREMO DE ESCRITURA DEL PIPE
-					perror("dup2");
-					exit(EXIT_FAILURE);
-				}
 
-				close(pipe_here[0]); // UNA VEZ DUPLICADO CON DUP2, CERRAMOS EL EXTREMO DE LECTURA TB
-			}
+			close_here_child_pipes(cmd, pipe_here, STDIN_FILENO);
 			// .................................................................................................
 
 			execv(cmd->path, cmd->argumentos);
@@ -1108,32 +1123,12 @@ exec_cmd(Command *cmd, int background)
 			exit(0);
 		default:
 			// ......................... EN CASO DE HERE{} ................................................
-			if (cmd->here != NULL) {
-				close(pipe_here[0]);
-				// Escribir la cadena en el extremo de escritura del pipe
-				write(pipe_here[1], cmd->here, strlen(cmd->here)); // ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
-				close(pipe_here[1]); // UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
-			}
+			close_here_father_pipes(cmd, pipe_here);
 			// ............................................................................................
 
 			if (background == 0) {
-				int status;
-				wait(&status);
-				//printf("Command executed\n");
-				// ............ ENV VAR "result" ..................
-				char wexit[2]; //Una posicion para 0 o 1 (estatus de finalizacion) y otra para "/o"
-				if (WIFEXITED(status)) {
-					//printf("Estado de salida del hijo: %d\n", WEXITSTATUS(status));
-					// ......... Para env var "result" .....................
-					sprintf((char *)wexit, "%d", WEXITSTATUS(status)); // Convierte el entero a cadena
-					setenv("result", wexit, 1);
-					// .........................................................
-				} else {
-					err(EXIT_FAILURE, "The child ended unnormally");
-				}
-				// ............................................
+				wait_single_child();
 			}
-
 			//printf("Command executing in background\n");
 			
 		}
@@ -1370,82 +1365,24 @@ commands_printer(Commands *cmds) {
 
 }
 
-
+/*
 void sigint_handler(int signum) {
     printf("\nSeñal SIGINT (Ctrl+C) recibida. Liberando memoria...\n");
     free_commands(&Comandos); // Asegúrate de que Comandos sea visible aquí
     exit(atoi(getenv("result")));
 }
+*/
 
-int
-main(int argc, char *argv[])
+
+// ----------------------- FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
+
+
+
+void
+read_lines(Commands *cmds)
 {
 
-    //Commands Comandos;
-    
-
-    if (argc > 1) {
-        err(EXIT_FAILURE, "No arguments needed.");
-    }
-
-	/*
-	do {
-		
-		if (Comandos.background == 1) {
-			printf("Limpiando comandos \n");
-			free_commands(&Comandos);
-		}
-
-
-		// Configurar el manejador de señales para SIGINT
-		if (signal(SIGINT, sigint_handler) == SIG_ERR) {
-			perror("Error al configurar el manejador de señales");
-			return EXIT_FAILURE;
-		}
-		
-		printf("traza1\n");
-		initializerCommands(argv, &Comandos);
-		printf("traza2\n");
-		//Comandos.background = 0;
-		read_lines(&Comandos);
-		printf("traza2\n");
-		if (Comandos.numCommands > 0) {
-			search_paths(&Comandos);
-
-			printf("traza3\n");
-			commands_printer(&Comandos);
-			
-			printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
-			exec_cmds(&Comandos);
-			//free_commands(&Comandos);
-		}
-		
-		
-		
-	} while (1);	
-	//} while (Comandos.background == 1); //Cuando no se accede al campo a traves de un puntero se pone "." en vez de "->"
-
-	printf("\n");
-	printf("-----------------------------------------------------------------------------------------------------------------------\n");
-
-    free_commands(&Comandos);
 	
-
-		char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
-
-	malloc_check(line);
-
-	printf("background %d\n", cmds->background);
-	*/
-	/*
-	//if (cmds->background == 0) {
-	fgets(line, LINE_BUFFER_SIZE, stdin);
-	line = clean_line(line, '\n');
-	if (strcmp(line, "") != 0) {
-		tokenizator(line, cmds);
-	}
-	*/
-
 	char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
 
 	malloc_check(line);
@@ -1457,25 +1394,25 @@ main(int argc, char *argv[])
 			free_commands(&Comandos);
 		}*/
 		
-		if(Comandos.numCommands > 0) {
-			free_commands(&Comandos);
-			initializerCommands(argv, &Comandos);
+		if(cmds->numCommands > 0) { //EN CASO DE QUE SE HAYA INTRODUCIDO UNA LINEA VACIA NO HACEMOS NADA
+			free_commands(cmds);
+			initializerCommands(cmds);
 		}
 		
 		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
 		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
 		if (strcmp(line, "") != 0) {
-			formatter(line, &Comandos);
+			formatter(line, cmds);
 
 
-			if (Comandos.numCommands > 0) {
-			search_paths(&Comandos);
+			if (cmds->numCommands > 0) {
+			search_paths(cmds);
 
 			
 			//commands_printer(&Comandos);
 			
 			//printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
-			exec_cmds(&Comandos);
+			exec_cmds(cmds);
 			//free_commands(&Comandos);
 			}
 		}
@@ -1490,7 +1427,24 @@ main(int argc, char *argv[])
 
 	free(line);
 
+	
 
+}
+// ----------------------- FIN DE FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
+
+int
+main(int argc, char *argv[])
+{
+
+    Commands Comandos;
+    initializerCommands(&Comandos);
+	
+    if (argc > 1) {
+        err(EXIT_FAILURE, "No arguments needed.");
+    }
+
+	read_lines(&Comandos);
+	
 	free_commands(&Comandos);
 
    	exit(atoi(getenv("result")));

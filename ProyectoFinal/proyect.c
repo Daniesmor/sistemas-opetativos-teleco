@@ -475,29 +475,47 @@ close_here_father_pipes(Command *cmd, int pipe_here[2])
 void
 first_optional(Commands *cmds)
 {
-	char *linea = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+	char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
 
-	malloc_check(linea);
+	malloc_check(line);
 
-	char *here_string = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+	int total_size = LINE_BUFFER_SIZE;
+    int total_read = 0; //esto representará lo que hemos leido en total de toda las llamadas a fgets
 
-	malloc_check(here_string);
+	//char *here_string = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+
+	//malloc_check(here_string);
 
 	//HAY QUE TENER EN CUENTA QUE linea NO ME AÑADE \O, solo \n
-	here_string[0] = '\0';	//INICIALIZAMOS EL STRING CON UNA CADENA VACIA PARA ASEGURARSE DE QUE TENGA CARCTER NULO DE TERMINACION
+	//here_string[0] = '\0';	//INICIALIZAMOS EL STRING CON UNA CADENA VACIA PARA ASEGURARSE DE QUE TENGA CARCTER NULO DE TERMINACION
 
 	do {
-		fgets(linea, LINE_BUFFER_SIZE, stdin);
-		here_string = (char *)realloc(here_string, sizeof(here_string) + sizeof(linea) + 1);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea, el 1 es por \0
-		strcat(here_string, linea);
-	}
-	while (strchr(linea, '}') == NULL);	//MIENTRAS QUE NO ENCONTREMOS EL FIN DE HERE{} SEGUIMOS LEYENDO
+		if (fgets(line + total_read, LINE_BUFFER_SIZE, stdin) == NULL) {
+            break; // ERROR O EOF
+        }
+		//printf("Tamaño de line despues de leer: %ld \n", sizeof(line));
+		// fgets empezará a escribir en la dir de memoria line + total_read
+		// leera como maximo LINE_BUFFER_SIZE
+		// lo leera de stdin
 
-	clean_line(here_string, '}');
-	//printf("%s \n", here_string);
-	cmds->comandos[0]->here = strdup(here_string);
-	free(here_string);
-	free(linea);
+		size_t last_read = strlen(line + total_read); // ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+		//total_read = total_read + last_read;
+
+
+            // SI EL ULTIMO CARACTER NO ES \n SIGNIFICA QUE NO HEMOS LEIDO LA LINEA ENTERA
+		total_read += last_read; // ACTUALIZAMOS total_read CON LO QUE HEMOS LEIDO EN LA ULTIMA LLA,ADA
+		total_size += LINE_BUFFER_SIZE; // SUMAMOS OTROS 256 CARACTERES
+		line = realloc(line, total_size); // Hacemos un realloc con el nuevo tamaño, y continuaremos leyendo desde line + current_size
+		malloc_check(line);
+
+	}
+	while (strchr(line, '}') == NULL);	//MIENTRAS QUE NO ENCONTREMOS EL FIN DE HERE{} SEGUIMOS LEYENDO
+
+	clean_line(line, '}');
+	//printf("Linea de here: %s \n", line);
+	cmds->comandos[0]->here = strdup(line);
+	//free(here_string);
+	free(line);
 }
 
 // ------------------------------- FIN LOGICA PARA EL OPCIONAL I (IMPLEMENTACION DE HERE{}) ------------------------------------------------------------
@@ -1375,51 +1393,75 @@ void sigint_handler(int signum) {
 
 // ----------------------- FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
 
-void
-read_lines(Commands *cmds)
+void proccess_line(Commands *cmds, char *line) {
+	if (cmds->numCommands > 0) {
+						free_commands(cmds);
+						initializerCommands(cmds);
+					}
+
+					formatter(line, cmds);
+
+					if (cmds->numCommands > 0) {
+						search_paths(cmds);
+						exec_cmds(cmds);
+					}
+}
+
+
+void read_lines(Commands *cmds)
 {
+    char *line = (char *)malloc(LINE_BUFFER_SIZE);
+    malloc_check(line);
 
-	char *line = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
+    int total_size = LINE_BUFFER_SIZE;
+    int total_read = 0; //esto representará lo que hemos leido en total de toda las llamadas a fgets
 
-	malloc_check(line);
+	//int actual_position = line + total_read; // ESTAMOS AL PRINCIPIO DE line
 
-	while (fgets(line, LINE_BUFFER_SIZE, stdin) != NULL) {	//Cada vez que llamemos a fgets, se sobreescribirá line
+    while (1) {
+		//printf("Tamaño de line: %ld \n", sizeof(line));
+        if (fgets(line + total_read, LINE_BUFFER_SIZE, stdin) == NULL) {
+            break; // ERROR O EOF
+        }
+		//printf("Tamaño de line despues de leer: %ld \n", sizeof(line));
+		// fgets empezará a escribir en la dir de memoria line + total_read
+		// leera como maximo LINE_BUFFER_SIZE
+		// lo leera de stdin
 
-		/*if (Comandos.background == 1) {
-		   printf("Limpiando comandos \n");
-		   free_commands(&Comandos);
-		   } */
+		size_t last_read = strlen(line + total_read); // ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+		//total_read = total_read + last_read;
 
-		if (cmds->numCommands > 0) {	//EN CASO DE QUE SE HAYA INTRODUCIDO UNA LINEA VACIA NO HACEMOS NADA
-			free_commands(cmds);
-			initializerCommands(cmds);
-		}
-		// EJECUTAMOS EL COMANDO SI RETORNA ERROR ES QUE EL ARCHIVO NO EXISTE POR LO QUE NO HABRA QUE CREAR UNO NUEVO
-		line = clean_line(line, '\n');	//Limpiamos line porque alfinal tiene un '\n'
-		if (strcmp(line, "") != 0) {
-			formatter(line, cmds);
+		if (last_read == 0 || line[total_read + last_read - 1] == '\n') { // SI NO HEMOS LEIDO NADA, O SI LA ULTIMA POSICION ES UNSALTO DE LINEA
+			if (line[total_read + last_read - 1] == '\n') {
+				// Eliminar el '\n' si se ha leído una línea completa
+				clean_line(line, '\n');
+				//line[total_read + last_read - 1] = '\0';
+				
+        	}
+		
+			total_read = 0; // REINICIAMOS PAA LA SIGUIENTE LINEA, POR QUE LA HEMOS LEIDO ENTERA (ESTO SERIA OTRO)
+			
 
-			if (cmds->numCommands > 0) {
-				search_paths(cmds);
-
-				//commands_printer(&Comandos);
-
-				//printf("------------------------------- EJECUCION en plano: %d --------------------------- \n", Comandos.background);
-				exec_cmds(cmds);
-				//free_commands(&Comandos);
+			if (total_read + last_read > 0) { // COMPROBAMOS QUE HAYA LEÍDO ALGO
+				proccess_line(cmds, line);					
 			}
-		}
+            
+        } else {
+            // SI EL ULTIMO CARACTER NO ES \n SIGNIFICA QUE NO HEMOS LEIDO LA LINEA ENTERA
+			total_read += last_read; // ACTUALIZAMOS total_read CON LO QUE HEMOS LEIDO EN LA ULTIMA LLA,ADA
+			total_size += LINE_BUFFER_SIZE; // SUMAMOS OTROS 256 CARACTERES
+			line = realloc(line, total_size); // Hacemos un realloc con el nuevo tamaño, y continuaremos leyendo desde line + current_size
+			malloc_check(line);
+        }
 
-	}
+    }
 
-	if (!feof(stdin)) {
-		// Llegamos al final de la entrada estándar
-		errx(EXIT_FAILURE, "eof not reached");
+    if (!feof(stdin)) {
+        // Error al leer
+        errx(EXIT_FAILURE, "error reading input");
+    }
 
-	}
-
-	free(line);
-
+    free(line);
 }
 
 // ----------------------- FIN DE FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------

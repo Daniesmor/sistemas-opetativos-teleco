@@ -9,6 +9,7 @@
         "temp": "c",
         "old": "c",
         "string.h": "c",
-        "err.h": "c"
+        "err.h": "c",
+        "purgatorio": "c"
     }
 }

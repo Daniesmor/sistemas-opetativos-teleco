@@ -219,7 +219,7 @@ executeCommands(Command *Commands[])
 			}
 		}
 
-		switch (child = fork()) {	// ---------- HIJO 1
+		switch (child = fork()) {	// ---------- HIJO 1 ----------------
 		case -1:
 			err(EXIT_FAILURE,
 			    "Theres an error with the child proccess");

@@ -482,18 +482,14 @@ first_optional(Commands *cmds)
 	int total_size = LINE_BUFFER_SIZE;
     int total_read = 0; //esto representará lo que hemos leido en total de toda las llamadas a fgets
 
-	//char *here_string = (char *)malloc(LINE_BUFFER_SIZE);	// Hacemos una asignación inicial de memoria de 256 caracteres por linea
-
-	//malloc_check(here_string);
 
 	//HAY QUE TENER EN CUENTA QUE linea NO ME AÑADE \O, solo \n
-	//here_string[0] = '\0';	//INICIALIZAMOS EL STRING CON UNA CADENA VACIA PARA ASEGURARSE DE QUE TENGA CARCTER NULO DE TERMINACION
+	
 
 	do {
 		if (fgets(line + total_read, LINE_BUFFER_SIZE, stdin) == NULL) {
             break; // ERROR O EOF
         }
-		//printf("Tamaño de line despues de leer: %ld \n", sizeof(line));
 		// fgets empezará a escribir en la dir de memoria line + total_read
 		// leera como maximo LINE_BUFFER_SIZE
 		// lo leera de stdin
@@ -514,7 +510,6 @@ first_optional(Commands *cmds)
 	clean_line(line, '}');
 	//printf("Linea de here: %s \n", line);
 	cmds->comandos[0]->here = strdup(line);
-	//free(here_string);
 	free(line);
 }
 

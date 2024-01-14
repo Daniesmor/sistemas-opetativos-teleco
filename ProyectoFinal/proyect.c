@@ -669,6 +669,7 @@ tokenizator(char *line, Commands *cmds)
 
 	char *token;
 	char *saveptr;
+	
 
 	//SETEAMOS EL PRIMER COMANDO
 	if (reserve_commands(cmds) == NULL) {
@@ -728,26 +729,56 @@ rewrite_line(char *line, char *nuevoString)
 }
 
 void
+remove_tabs(char *line, char *linenotabs)
+{
+	char *token;
+	char *saveptr;
+
+	token = strtok_r(line, " \t", &saveptr);
+
+	strcpy(linenotabs, token);
+	strcat(linenotabs, " ");
+	while (token != NULL) {
+
+		token = strtok_r(NULL, " \t", &saveptr);
+
+
+		if (token != NULL) {
+
+			strcat(linenotabs, token);
+			strcat(linenotabs, " ");
+		}
+	}
+}
+
+void
 formatter(char *line, Commands *cmds)
 {
+
+
 	int longitud = strlen(line);
 
+	char *linenotabs = (char *)malloc((2 * longitud + 1) * sizeof(char));
+	malloc_check(linenotabs);
 	char *nuevoString = (char *)malloc((2 * longitud + 1) * sizeof(char));
+	malloc_check(nuevoString);
 
-	if (nuevoString == NULL) {
-		memLocateFailed();
-		return;
-	}
+	remove_tabs(line, linenotabs); // ESTA FUNCION QUITA LAS TABULACIONES Y LE DA FORMATO DE ESPACIOS
 
-	rewrite_line(line, nuevoString);
+	//printf("nuevostring: %s \n", linenotabs);
 
+	rewrite_line(linenotabs, nuevoString); //ESTO DA FORMATO A LAS LINEA EN CASO DE QUE NO HALLA ESPACIOS ENTRE LOS CARACTERES ESPECIALES
+
+	
 	//printf("strlen de line: %d \n", longitud);
 	//printf("strlen de nuevostring: %ld \n", strlen(nuevoString));
+	//printf("nuevostring: %s \n", nuevoString);
 
 	if (nuevoString != NULL) {
 		//printf("Nuevo string: %s \n", nuevoString);
 		tokenizator(nuevoString, cmds);
 		free(nuevoString);
+		free(linenotabs);
 	} else {
 		memLocateFailed();
 	}

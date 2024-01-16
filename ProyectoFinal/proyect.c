@@ -1284,7 +1284,7 @@ exec_sust(Command *cmd)
 
 	if (variable == NULL) {
 		status = 1;
-		printf("error: var %s does not exist. \n", cmd->argumentos[1]);
+		printf("error: var %s does not exist. \n", cmd->argumentos[0]);
 
 	} else {
 		printf("%s \n", variable);
@@ -1398,12 +1398,30 @@ exec_builtin(Command *cmd)
 	}
 }
 
+int
+check_all_paths(Commands *cmds) { //ESTA FUNCION ES UN NIVEL MAS DE SEGURDIAD PARA EL PIPE
+	int path = 0; // SI PATH == 1 ENTONCES HAY UN CMD QUE NO TIENE PATH ASIGNADO
+	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
+		
+		if (cmds->comandos[numCommand]->path == NULL) {
+			path = 1;
+		}
+		
+	}
+
+	return path;
+}
+
 void
 exec_cmds(Commands *cmds)
 {
 	if (cmds->numCommands > 1) {
 		// HAY UN PIPE
-		execute_pipe(cmds);
+		//COMPROBAMOS SI TODOS LOS CMDS TIENEN UN PATH, ANTES DE EJCUTAR EL PIPE PARA PREVENIR ERRORES
+		if ( check_all_paths(cmds) == 0 ) { //SI check_all_paths == 0 entonces todos los cmds tienen paths.
+			execute_pipe(cmds);
+		}
+		
 	} else {
 
 		// COMPROBAMOS SI ES UN COMANDO BUILT_IN

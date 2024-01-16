@@ -29,6 +29,7 @@ const char *builtin_cmds[] = {
 	"$",
 };
 
+
 // ----------------------- FIN DE PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
 // ----------------------- ESTRUCTURAS DE DATOS UTILIZADAS --------------------------------------------------------------------------------------
@@ -204,7 +205,7 @@ setLastArgumentNull(Command *cmd)
 }
 
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMANDS -----------------------------------------------------------------------------
-// ----------------------- FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE ------------------------------------------------------
+// ----------------------- FUNCIONES DEDICADAS A LA LIBERACIÓN DE MEMORIA ASIGNADA DINAMICAMENTE DE LOS COMANDOS ------------------------------------------------------
 
 void
 free_command(Command *cmd)
@@ -313,32 +314,36 @@ get_variable(char *found)
 }
 
 void
-write_newtoken(char **new_token, char *variable, char *ptr)
+write_newtoken(char **new_token, char *variable, char *original_token_copy)
 {
 
 	//*new_token[0] = '\0'; //INICIALIZAMOS EL STRING CON UNA CADENA VACIA PARA ASEGURARSE DE QUE TENGA CARCTER NULO DE TERMINACION
 
 	if (strcmp(variable, "") == 0) {
-		strcpy(*new_token, ptr);
+		strcpy(*new_token, original_token_copy);
 	} else {
+
 		strcpy(*new_token, variable);
-		strcat(*new_token, "/");
-		strcat(*new_token, ptr);
+		//strcat(*new_token, "/");
+		strcat(*new_token, original_token_copy);
 	}
+
+	
 
 }
 
 void
-remake_token(char **new_token, char *variable, char *ptr)
+remake_token(char **new_token, char *variable, char *original_token_copy)
 {
-	printf("valor de ptr %s \n", ptr);
+	//printf("valor de ptr %s \n", ptr--);
 
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
 
-	*new_token = malloc(strlen(variable) + strlen(ptr) + 2);	//El 1 es del '/0' y otro por el "/"
+	*new_token = malloc(strlen(variable) + strlen(original_token_copy) + 2);	//El 1 es del '/0' y otro por el "/"
+	
 
 	if (*new_token != NULL) {
-		write_newtoken(*&new_token, variable, ptr);
+		write_newtoken(*&new_token, variable, original_token_copy);
 
 	} else {
 		memLocateFailed();
@@ -359,24 +364,36 @@ sust_vars(char **token, char **new_token)
 	char *ptr;
 	char *found = NULL;
 	char *variable;
-	char *delimiter = "/";
+	char *delimiter = " /\t";
+	char *original_token_copy;
 
 	//char *new_token;
 
 	ptr = strchr(*token, '$');
 	ptr++;			//AVANCAMOS UNA POSICION, ES DECIR AL SIGUIENTE CARACTER DESPUES DE $
+	//printf("ptr 1: %s \n", ptr);
+	original_token_copy = strdup(ptr);
 	found = get_next_token(ptr, delimiter);	// BUSCAMOS LA PALABRA DELIMITADA, EN CASO DE QUE HAYA ALGO DESPUES DE LA VAR
+	//printf("esto que es: %s \n", found);
+	//printf("ptr 2: %s \n", ptr);
+	//printf("strelen: %ld \n", strlen(found));
+	original_token_copy = original_token_copy + strlen(found); // ESTO SERÁ EL TEXTO QUE HAY DESPUES DE LA VARIABLE QUE QUEREMOS SUSTITUIR
+	//original_token_copy = original_token_copy + (strlen(found)+1);
+	//printf("origina: %s \n", original_token_copy);
 	if (found != NULL) {
 
+
 		// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
-		ptr = ptr + (strlen(found));	// NOS SITUAMOS INMEDIATAMENTE DESPUES DEL LA VARIABLE A SUSTITUIR
+		//ptr = ptr + (strlen(found)+1);	// NOS SITUAMOS INMEDIATAMENTE DESPUES DEL LA VARIABLE A SUSTITUIR
+		//printf("%s \n", ptr);
 		variable = get_variable(found);
 
-		if (*ptr == '\0') {
+		if (*original_token_copy == '\0') {
 			*new_token = strdup(variable);
 		} else {
-			remake_token(&*new_token, variable, ptr);	//RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
+			remake_token(&*new_token, variable, original_token_copy);	//RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
 		}
+		
 
 		/* DOCUMENTACION RAPIDA DE FUNCIONAMIENTO
 		   Coge el token, busca cual es la variable que hay que sustituior (found), una vez
@@ -384,10 +401,20 @@ sust_vars(char **token, char **new_token)
 		   si despues de la variable habia mas texto, en cuyo caso se sustituye y se 
 		   reescribe el token, en caso contrario se copia la dir de la variable ya encontrada. */
 
+		
+
 	} else {
 		//free(*token);
 		*new_token = strdup("$");
 	}
+
+	;
+	if (original_token_copy != NULL) { //L
+
+		free(original_token_copy - strlen(found)); //NOS SITUAMOS EN LA POSICION INICIAL EN LA QUE SE HIZO EL STRDUP PARA LIBERAR TODO
+	}
+
+	
 
 }
 
@@ -640,8 +667,7 @@ globbing_classifier(Commands *cmds, char *token, char *saveptr)
 
 	if (patterns_found == 0) {
 		for (int i = 0; i < glob_result.gl_pathc; i++) {
-			printf("Archivo encontrado: %s\n",
-			       glob_result.gl_pathv[i]);
+			//printf("Archivo encontrado: %s\n", glob_result.gl_pathv[i]);
 			token = glob_result.gl_pathv[i];
 			instruction_classifier(cmds, &token, &saveptr);
 		}
@@ -929,7 +955,7 @@ fd_setter(Command *cmd, int *fd_in, int *fd_out)	// ESTA FUNCION REALIZA LAS RED
 	}
 
 	if (cmd->salida != NULL) {
-		printf("Se ha cambiado la salida \n");
+		//printf("Se ha cambiado la salida \n");
 		*fd_out = open(cmd->salida, O_CREAT | O_WRONLY | O_TRUNC, 0666);
 		dup2(*fd_out, STDOUT_FILENO);
 	} else {
@@ -1196,7 +1222,10 @@ exec_cd(Command *cmd)
 
 	if (cmd->numArgumentos > 1) {
 		// SI HAY MAS DE UN ARGUMENTO SIGNIFICA QUE HAY UN PATH, args: (cd, path)               
-		chdir(cmd->argumentos[1]);
+		if (chdir(cmd->argumentos[1]) != 0) {
+			status = 1;
+			printf("The dir doesn't exist. \n");
+		}
 	} else {
 		// NO NOS HAN DADO UN PATH ASI QUE TENENOS QUE IR A HOME
 		char *sh_home = getenv("HOME");
@@ -1205,7 +1234,7 @@ exec_cd(Command *cmd)
 	}
 
 	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));
+	sprintf((char *)wexit, "%d", status);
 	setenv("result", wexit, 1);	// Actualizar el valor de "result" dependiendo del estado
 	// ...............................................................
 }
@@ -1223,17 +1252,19 @@ exec_asig(Command *cmd)
 	//printf("Queremos darle a %s el valor %s \n", cmd->argumentos[0], cmd->argumentos[1]);
 
 	if (setenv(cmd->argumentos[0], cmd->argumentos[1], 1) != 0) {	//EL 1 ES APRA SOBREESCRIBIR LA VARIABLE EN CASO DE QUE YA EXISTA
+		status = 1;
 		err(EXIT_FAILURE, "Error to establish environment variable");
 	}
 	// Acceder al valor de la variable de entorno
 	char *env_value = getenv(cmd->argumentos[0]);
 
 	if (env_value == NULL) {
+		status = 1;
 		printf("%s not defined.\n", cmd->argumentos[0]);
 	}
 
 	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));
+	sprintf((char *)wexit, "%d", status);
 	setenv("result", wexit, 1);	// Actualizar el valor de "result" dependiendo del estado
 	// ...............................................................
 
@@ -1252,6 +1283,7 @@ exec_sust(Command *cmd)
 	char *variable = getenv(cmd->argumentos[0]);
 
 	if (variable == NULL) {
+		status = 1;
 		printf("error: var %s does not exist. \n", cmd->argumentos[1]);
 
 	} else {
@@ -1259,7 +1291,7 @@ exec_sust(Command *cmd)
 	}
 
 	// ............. Definimos env var "result" .....................
-	sprintf((char *)wexit, "%d", WEXITSTATUS(status));
+	sprintf((char *)wexit, "%d", status);
 	setenv("result", wexit, 1);	// Actualizar el valor de "result" dependiendo del estado
 	// ...............................................................
 
@@ -1313,7 +1345,7 @@ exec_ifok(Command *cmd)
 }
 
 void
-exec_ifnot(Command *cmd)
+exec_ifnot(Command *cmd) //SI IFNOT NO EJECUTA EL COMANDO, SSERA UN STATUS DE ERROR
 {
 
 	char *prev_status = getenv("result");
@@ -1328,7 +1360,7 @@ exec_ifnot(Command *cmd)
 
 			remake_cmd(cmd, &background);
 			search_path(cmd);
-			printf("algo aqui? \n");
+			//printf("algo aqui? \n");
 
 			exec_cmd(cmd, background);	//SI PONEMOS ifnot lsa, lsa no existe, por tanto ifnot fallará
 

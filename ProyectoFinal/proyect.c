@@ -9,6 +9,14 @@
 #include <signal.h>
 #include <glob.h>
 
+/*
+
+gcc -Wall -Wshadow -Wvla -g -c proyect.c
+gcc -g -o proyect proyect.o
+valgrind --leak-check=yes ./proyect
+
+*/
+
 // ----------------------- PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
 enum {
@@ -28,7 +36,6 @@ const char *builtin_cmds[] = {
 	"ifnot",
 	"$",
 };
-
 
 // ----------------------- FIN DE PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
 
@@ -76,21 +83,49 @@ clean_line(char *line, char character)
 
 // -------------------- GESTIÓN DE ERRORES DEL PROGRAMA -----------------------------------------------------------------------------------------
 
-int
-malloc_check(char *line)
-{
-
-	if (line == NULL) {
-		err(EXIT_FAILURE, "Memory asignation for path failed.");	// Mensaje de error con información adicional
-	}
-	return 0;
-}
-
 void
 memLocateFailed()
 {
 	err(EXIT_FAILURE,
 	    "Error: Could not allocate memory for the argument.\n");
+}
+
+
+int
+malloc_check(char *line)
+{
+
+	if (line == NULL) {
+		memLocateFailed();	// Mensaje de error con información adicional
+	}
+	return 0;
+}
+
+
+int
+cmd_malloc_check(Command *cmd)
+{
+
+	if (cmd == NULL) {
+		memLocateFailed();	// Mensaje de error con información adicional
+	}
+	return 0;
+}
+
+void
+write_failed() {
+	err(EXIT_FAILURE, "Error: Write failed. \n");
+}
+
+
+void
+pipe_malloc_check(int *pipe)
+{
+
+	if (pipe == NULL) {
+		memLocateFailed();	// Mensaje de error con información adicional
+	}
+
 }
 
 // ---------------------- FIN DE GESTIÓN DE ERRORES DEL PROGRAMA------------------------------------------------------------------------------
@@ -118,6 +153,9 @@ reserve_args(Command *cmd)
 
 	cmd->argumentos =
 	    realloc(cmd->argumentos, (cmd->numArgumentos + 1) * sizeof(char *));
+	if (cmd->argumentos == NULL) {
+		memLocateFailed();
+	}
 	return cmd->argumentos;
 
 }
@@ -145,6 +183,7 @@ assignCommandName(Command *cmd, char *name)
 {
 	check_empty_name(cmd);
 	cmd->nombre = strdup(name);
+	malloc_check(cmd->nombre);
 }
 
 void
@@ -152,12 +191,14 @@ assignCommandPath(Command *cmd, char *path)
 {
 	check_empty_path(cmd);
 	cmd->path = strdup(path);
+	malloc_check(cmd->path);
 }
 
 void
 assignCommandArg(Command *cmd, char *arg)
 {
 	cmd->argumentos[cmd->numArgumentos] = strdup(arg);
+	malloc_check(cmd->argumentos[cmd->numArgumentos]);
 }
 
 // ----------------------------- FIN DE GESTION DEL STRUCT COMMAND ----------------------------------------------------------------------
@@ -179,8 +220,12 @@ reserve_commands(Commands *cmds)	//GESTIONA LA LISTA QUE CONTENDRÁ LOS PUNTEROS
 {
 
 	cmds->comandos = realloc(cmds->comandos, (cmds->numCommands + 1) * sizeof(Command *));	//Reserva memoria para una lista de numCOmmands+1 punteros a Commands
+	if (cmds->comandos == NULL) {
+		memLocateFailed();
+	}
 	//cmds->comandos[cmds->numCommands] = malloc(sizeof(Command)); // Reservamos memoria para el comando en cuestion
 	cmds->comandos[cmds->numCommands] = malloc(sizeof(Command));	// Reservamos memoria para el comando en cuestion
+	cmd_malloc_check(cmds->comandos[cmds->numCommands]);
 
 	initializerCommand(cmds->comandos[cmds->numCommands]);	//Inicializamos el comando con los valores predetermiandos
 
@@ -193,13 +238,7 @@ reserve_commands(Commands *cmds)	//GESTIONA LA LISTA QUE CONTENDRÁ LOS PUNTEROS
 void
 setLastArgumentNull(Command *cmd)
 {
-
-	if (reserve_args(cmd) == NULL) {
-		// Manejar el error de asignación de memoria
-		memLocateFailed();
-		//free(argv_copy);
-		return;
-	}
+	malloc_check(*reserve_args(cmd));
 
 	cmd->argumentos[cmd->numArgumentos] = NULL;	// Establecer el último elemento como NULL
 }
@@ -245,12 +284,14 @@ add_asignation_arg(char *vars, Commands *cmds)
 	if (reserve_args(cmds->comandos[cmds->numCommands]) == NULL) {
 		// Manejar el error de asignación de memoria
 		memLocateFailed();
-		return;
 	}
+
 	// GUARDAMOS EL VALOR DE LA VARIABLE QUE QUEREMOS CREAR COMO ARGUMENTO 0
 	cmds->comandos[cmds->numCommands]->
 	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] =
 	    strdup(vars);
+	malloc_check(cmds->comandos[cmds->numCommands]->
+	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos]);
 	cmds->comandos[cmds->numCommands]->numArgumentos++;
 
 }
@@ -267,7 +308,10 @@ variable_asig(Commands *cmds, char *token)	// VAMOS A INTERPRETAR ESTE COMANDO C
 	add_asignation_arg(vars, cmds);
 
 	vars = strtok_r(NULL, " ", &saveptr);	//vars es una dir de memoria
-	add_asignation_arg(vars, cmds);
+	if (vars != NULL) {
+		add_asignation_arg(vars, cmds);
+	} 
+	
 
 }
 
@@ -289,6 +333,8 @@ sust_cmd(Commands *cmds, char *token)	// VAMOS A INTERPRETAR ESTE COMANDO COMO U
 	cmds->comandos[cmds->numCommands]->
 	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] =
 	    strdup(vars);
+	malloc_check(cmds->comandos[cmds->numCommands]->
+	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos]);
 	cmds->comandos[cmds->numCommands]->numArgumentos++;
 
 }
@@ -328,8 +374,6 @@ write_newtoken(char **new_token, char *variable, char *original_token_copy)
 		strcat(*new_token, original_token_copy);
 	}
 
-	
-
 }
 
 void
@@ -340,7 +384,6 @@ remake_token(char **new_token, char *variable, char *original_token_copy)
 	// AHORA DEBEMOS RECONSTRUIR EL TOKEN, CON LA VARIABLE DELIMITADA
 
 	*new_token = malloc(strlen(variable) + strlen(original_token_copy) + 2);	//El 1 es del '/0' y otro por el "/"
-	
 
 	if (*new_token != NULL) {
 		write_newtoken(*&new_token, variable, original_token_copy);
@@ -351,11 +394,6 @@ remake_token(char **new_token, char *variable, char *original_token_copy)
 
 }
 
-/*
-		if (ptr != NULL) {
-			free(new_token);
-			printf("se ha ejecutado esto?\n");
-		}*/
 
 void
 sust_vars(char **token, char **new_token)
@@ -373,27 +411,27 @@ sust_vars(char **token, char **new_token)
 	ptr++;			//AVANCAMOS UNA POSICION, ES DECIR AL SIGUIENTE CARACTER DESPUES DE $
 	//printf("ptr 1: %s \n", ptr);
 	original_token_copy = strdup(ptr);
+	malloc_check(original_token_copy);
 	found = get_next_token(ptr, delimiter);	// BUSCAMOS LA PALABRA DELIMITADA, EN CASO DE QUE HAYA ALGO DESPUES DE LA VAR
 	//printf("esto que es: %s \n", found);
 	//printf("ptr 2: %s \n", ptr);
 	//printf("strelen: %ld \n", strlen(found));
-	original_token_copy = original_token_copy + strlen(found); // ESTO SERÁ EL TEXTO QUE HAY DESPUES DE LA VARIABLE QUE QUEREMOS SUSTITUIR
+	original_token_copy = original_token_copy + strlen(found);	// ESTO SERÁ EL TEXTO QUE HAY DESPUES DE LA VARIABLE QUE QUEREMOS SUSTITUIR
 	//original_token_copy = original_token_copy + (strlen(found)+1);
 	//printf("origina: %s \n", original_token_copy);
 	if (found != NULL) {
 
-
 		// OBTENEMOS EL TEXTO DESPUES DE LA PALABRA ENCONTRADA
-		//ptr = ptr + (strlen(found)+1);	// NOS SITUAMOS INMEDIATAMENTE DESPUES DEL LA VARIABLE A SUSTITUIR
+		//ptr = ptr + (strlen(found)+1);        // NOS SITUAMOS INMEDIATAMENTE DESPUES DEL LA VARIABLE A SUSTITUIR
 		//printf("%s \n", ptr);
 		variable = get_variable(found);
 
 		if (*original_token_copy == '\0') {
 			*new_token = strdup(variable);
+			malloc_check(*new_token);
 		} else {
 			remake_token(&*new_token, variable, original_token_copy);	//RECONSTRUIMOS EL TOKEN, CON LA VARIABLE YA SUSTITUIDA
 		}
-		
 
 		/* DOCUMENTACION RAPIDA DE FUNCIONAMIENTO
 		   Coge el token, busca cual es la variable que hay que sustituior (found), una vez
@@ -401,20 +439,17 @@ sust_vars(char **token, char **new_token)
 		   si despues de la variable habia mas texto, en cuyo caso se sustituye y se 
 		   reescribe el token, en caso contrario se copia la dir de la variable ya encontrada. */
 
-		
-
 	} else {
 		//free(*token);
 		*new_token = strdup("$");
+		malloc_check(*new_token);
 	}
 
 	;
-	if (original_token_copy != NULL) { //L
+	if (original_token_copy != NULL) {	//L
 
-		free(original_token_copy - strlen(found)); //NOS SITUAMOS EN LA POSICION INICIAL EN LA QUE SE HIZO EL STRDUP PARA LIBERAR TODO
+		free(original_token_copy - strlen(found));	//NOS SITUAMOS EN LA POSICION INICIAL EN LA QUE SE HIZO EL STRDUP PARA LIBERAR TODO
 	}
-
-	
 
 }
 
@@ -494,7 +529,9 @@ close_here_father_pipes(Command *cmd, int pipe_here[2])
 	if (cmd->here != NULL) {
 		close(pipe_here[0]);
 		// Escribir la cadena en el extremo de escritura del pipe
-		write(pipe_here[1], cmd->here, strlen(cmd->here));	// ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
+		if (write(pipe_here[1], cmd->here, strlen(cmd->here)) == -1) {
+			write_failed();
+		}	// ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
 		close(pipe_here[1]);	// UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
 	}
 }
@@ -507,28 +544,26 @@ first_optional(Commands *cmds)
 	malloc_check(line);
 
 	int total_size = LINE_BUFFER_SIZE;
-    int total_read = 0; //esto representará lo que hemos leido en total de toda las llamadas a fgets
-
+	int total_read = 0;	//esto representará lo que hemos leido en total de toda las llamadas a fgets
 
 	//HAY QUE TENER EN CUENTA QUE linea NO ME AÑADE \O, solo \n
-	
 
 	do {
 		if (fgets(line + total_read, LINE_BUFFER_SIZE, stdin) == NULL) {
-            break; // ERROR O EOF
-        }
+			break;	// ERROR O EOF
+		}
 		// fgets empezará a escribir en la dir de memoria line + total_read
 		// leera como maximo LINE_BUFFER_SIZE
 		// lo leera de stdin
 
-		size_t last_read = strlen(line + total_read); // ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+		size_t last_read = strlen(line + total_read);	// ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+
 		//total_read = total_read + last_read;
 
-
-            // SI EL ULTIMO CARACTER NO ES \n SIGNIFICA QUE NO HEMOS LEIDO LA LINEA ENTERA
-		total_read += last_read; // ACTUALIZAMOS total_read CON LO QUE HEMOS LEIDO EN LA ULTIMA LLA,ADA
-		total_size += LINE_BUFFER_SIZE; // SUMAMOS OTROS 256 CARACTERES
-		line = realloc(line, total_size); // Hacemos un realloc con el nuevo tamaño, y continuaremos leyendo desde line + current_size
+		// SI EL ULTIMO CARACTER NO ES \n SIGNIFICA QUE NO HEMOS LEIDO LA LINEA ENTERA
+		total_read += last_read;	// ACTUALIZAMOS total_read CON LO QUE HEMOS LEIDO EN LA ULTIMA LLA,ADA
+		total_size += LINE_BUFFER_SIZE;	// SUMAMOS OTROS 256 CARACTERES
+		line = realloc(line, total_size);	// Hacemos un realloc con el nuevo tamaño, y continuaremos leyendo desde line + current_size
 		malloc_check(line);
 
 	}
@@ -537,6 +572,7 @@ first_optional(Commands *cmds)
 	clean_line(line, '}');
 	//printf("Linea de here: %s \n", line);
 	cmds->comandos[0]->here = strdup(line);
+	malloc_check(cmds->comandos[0]->here);
 	free(line);
 }
 
@@ -566,6 +602,7 @@ instruction_output_redirection(Commands *cmds, char **token, char **saveptr)
 	char *file_name = strtok_r(NULL, " ", *&saveptr);
 
 	cmds->comandos[cmds->numCommands]->salida = strdup(file_name);
+	malloc_check(cmds->comandos[cmds->numCommands]->salida);
 	//*token = strtok_r(NULL, " ", *&saveptr);
 }
 
@@ -575,6 +612,7 @@ instruction_input_redirection(Commands *cmds, char **token, char **saveptr)
 	char *file_name = strtok_r(NULL, " ", *&saveptr);
 
 	cmds->comandos[0]->entrada = strdup(file_name);
+	malloc_check(cmds->comandos[0]->entrada);
 	//*token = strtok_r(NULL, " ", *&saveptr);
 }
 
@@ -695,7 +733,6 @@ tokenizator(char *line, Commands *cmds)
 
 	char *token;
 	char *saveptr;
-	
 
 	//SETEAMOS EL PRIMER COMANDO
 	if (reserve_commands(cmds) == NULL) {
@@ -768,7 +805,6 @@ remove_tabs(char *line, char *linenotabs)
 
 		token = strtok_r(NULL, " \t", &saveptr);
 
-
 		if (token != NULL) {
 
 			strcat(linenotabs, token);
@@ -781,21 +817,20 @@ void
 formatter(char *line, Commands *cmds)
 {
 
-
 	int longitud = strlen(line);
 
 	char *linenotabs = (char *)malloc((2 * longitud + 1) * sizeof(char));
 	malloc_check(linenotabs);
+
 	char *nuevoString = (char *)malloc((2 * longitud + 1) * sizeof(char));
 	malloc_check(nuevoString);
 
-	remove_tabs(line, linenotabs); // ESTA FUNCION QUITA LAS TABULACIONES Y LE DA FORMATO DE ESPACIOS
+	remove_tabs(line, linenotabs);	// ESTA FUNCION QUITA LAS TABULACIONES Y LE DA FORMATO DE ESPACIOS
 
 	//printf("nuevostring: %s \n", linenotabs);
 
-	rewrite_line(linenotabs, nuevoString); //ESTO DA FORMATO A LAS LINEA EN CASO DE QUE NO HALLA ESPACIOS ENTRE LOS CARACTERES ESPECIALES
+	rewrite_line(linenotabs, nuevoString);	//ESTO DA FORMATO A LAS LINEA EN CASO DE QUE NO HALLA ESPACIOS ENTRE LOS CARACTERES ESPECIALES
 
-	
 	//printf("strlen de line: %d \n", longitud);
 	//printf("strlen de nuevostring: %ld \n", strlen(nuevoString));
 	//printf("nuevostring: %s \n", nuevoString);
@@ -816,12 +851,11 @@ formatter(char *line, Commands *cmds)
 
 void
 create_currentdir(char *token, Command *cmd, char **current_dir)
-{				//CREA LA RUTA, CON EL NOMBRE DE PROGRAMA ETC...
+{				//CREA LA RUTA (solo el path), CON EL NOMBRE DE PROGRAMA ETC...
 
 	*current_dir = malloc(strlen(token) + 2 + strlen(cmd->nombre));	// +2 para el '/' y '\0' y luego lo que ocupe el nombre del comando
-	if (*current_dir == NULL) {
-		memLocateFailed();
-	}
+	malloc_check(*current_dir);
+
 	strcpy(*current_dir, token);
 	strcat(*current_dir, "/");
 	strcat(*current_dir, cmd->nombre);
@@ -836,6 +870,7 @@ access_dir(char *current_dir, Command *cmd)
 			free(cmd->path);
 		}
 		cmd->path = strdup(current_dir);
+		malloc_check(cmd->path);
 		//printf("Se ha encontrado en: %s \n", cmd->path);
 	}
 }
@@ -846,8 +881,10 @@ searchin_paths(Command *cmd)
 	//printf("-----> Buscamos en $PATHS \n");
 
 	char *sh_paths = getenv("PATH");	//ESTO NOS DEVUELVE LA LISTA DE LA VAR. PATHS DE LA SHELL, SEPARADOS POR ":", POR LO QUE HAY QUE TOKENIZARLA
+	// PATH ES UNA VARIABLE QUE ESTÁ ENTODOS LOS SIST LINUX POR LO QUE NO HACE FALTA COMPROBAR SI EXISTIRÁ
 
 	char *sh_paths_copy = strdup(sh_paths);
+	malloc_check(sh_paths_copy);
 
 	char *token;
 	char *saveptr;
@@ -907,6 +944,7 @@ is_builtin(Command *cmd)
 			}
 
 			cmd->path = strdup("built-in");
+			malloc_check(cmd->path);
 
 		}
 	}
@@ -1022,9 +1060,11 @@ execute_pipe(Commands *cmds)
 	int child;
 
 	int **pipes = malloc((cmds->numCommands - 1) * sizeof(int *));
+	// COMPROBRAMES QUE FUNCIONA AHORA
 
 	for (int pipe = 0; pipe < cmds->numCommands - 1; pipe++) {
 		pipes[pipe] = malloc(2 * sizeof(int));
+		pipe_malloc_check(pipes[pipe]);
 	}
 
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
@@ -1262,7 +1302,6 @@ exec_asig(Command *cmd)
 		status = 1;
 		printf("%s not defined.\n", cmd->argumentos[0]);
 	}
-
 	// ............. Definimos env var "result" .....................
 	sprintf((char *)wexit, "%d", status);
 	setenv("result", wexit, 1);	// Actualizar el valor de "result" dependiendo del estado
@@ -1345,7 +1384,7 @@ exec_ifok(Command *cmd)
 }
 
 void
-exec_ifnot(Command *cmd) //SI IFNOT NO EJECUTA EL COMANDO, SSERA UN STATUS DE ERROR
+exec_ifnot(Command *cmd)	//SI IFNOT NO EJECUTA EL COMANDO, SSERA UN STATUS DE ERROR
 {
 
 	char *prev_status = getenv("result");
@@ -1399,14 +1438,16 @@ exec_builtin(Command *cmd)
 }
 
 int
-check_all_paths(Commands *cmds) { //ESTA FUNCION ES UN NIVEL MAS DE SEGURDIAD PARA EL PIPE
-	int path = 0; // SI PATH == 1 ENTONCES HAY UN CMD QUE NO TIENE PATH ASIGNADO
+check_all_paths(Commands *cmds)
+{				//ESTA FUNCION ES UN NIVEL MAS DE SEGURDIAD PARA EL PIPE
+	int path = 0;		// SI PATH == 1 ENTONCES HAY UN CMD QUE NO TIENE PATH ASIGNADO
+
 	for (int numCommand = 0; numCommand < cmds->numCommands; numCommand++) {
-		
+
 		if (cmds->comandos[numCommand]->path == NULL) {
 			path = 1;
 		}
-		
+
 	}
 
 	return path;
@@ -1418,10 +1459,10 @@ exec_cmds(Commands *cmds)
 	if (cmds->numCommands > 1) {
 		// HAY UN PIPE
 		//COMPROBAMOS SI TODOS LOS CMDS TIENEN UN PATH, ANTES DE EJCUTAR EL PIPE PARA PREVENIR ERRORES
-		if ( check_all_paths(cmds) == 0 ) { //SI check_all_paths == 0 entonces todos los cmds tienen paths.
+		if (check_all_paths(cmds) == 0) {	//SI check_all_paths == 0 entonces todos los cmds tienen paths.
 			execute_pipe(cmds);
 		}
-		
+
 	} else {
 
 		// COMPROBAMOS SI ES UN COMANDO BUILT_IN
@@ -1469,75 +1510,78 @@ void sigint_handler(int signum) {
 
 // ----------------------- FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------
 
-void proccess_line(Commands *cmds, char *line) {
+void
+proccess_line(Commands *cmds, char *line)
+{
 	if (cmds->numCommands > 0) {
-						free_commands(cmds);
-						initializerCommands(cmds);
-					}
+		free_commands(cmds);
+		initializerCommands(cmds);
+	}
 
-					formatter(line, cmds);
+	formatter(line, cmds);
 
-					if (cmds->numCommands > 0) {
-						search_paths(cmds);
-						exec_cmds(cmds);
-					}
+	if (cmds->numCommands > 0) {
+		search_paths(cmds);
+		exec_cmds(cmds);
+	}
 }
 
-
-void read_lines(Commands *cmds)
+void
+read_lines(Commands *cmds)
 {
-    char *line = (char *)malloc(LINE_BUFFER_SIZE);
-    malloc_check(line);
+	char *line = (char *)malloc(LINE_BUFFER_SIZE);
 
-    int total_size = LINE_BUFFER_SIZE;
-    int total_read = 0; //esto representará lo que hemos leido en total de toda las llamadas a fgets
+	malloc_check(line);
+
+	int total_size = LINE_BUFFER_SIZE;
+	int total_read = 0;	//esto representará lo que hemos leido en total de toda las llamadas a fgets
 
 	//int actual_position = line + total_read; // ESTAMOS AL PRINCIPIO DE line
 
-    while (1) {
+	while (1) {
 		//printf("Tamaño de line: %ld \n", sizeof(line));
-        if (fgets(line + total_read, LINE_BUFFER_SIZE, stdin) == NULL) {
-            break; // ERROR O EOF
-        }
+		if (fgets(line + total_read, LINE_BUFFER_SIZE, stdin) == NULL) {
+			break;	// ERROR O EOF
+		}
 		//printf("Tamaño de line despues de leer: %ld \n", sizeof(line));
 		// fgets empezará a escribir en la dir de memoria line + total_read
 		// leera como maximo LINE_BUFFER_SIZE
 		// lo leera de stdin
 
-		size_t last_read = strlen(line + total_read); // ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+		size_t last_read = strlen(line + total_read);	// ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+
 		//total_read = total_read + last_read;
 
-		if (last_read == 0 || line[total_read + last_read - 1] == '\n') { // SI NO HEMOS LEIDO NADA, O SI LA ULTIMA POSICION ES UNSALTO DE LINEA
+		if (last_read == 0 || line[total_read + last_read - 1] == '\n') {	// SI NO HEMOS LEIDO NADA, O SI LA ULTIMA POSICION ES UNSALTO DE LINEA
 			if (line[total_read + last_read - 1] == '\n') {
 				// Eliminar el '\n' si se ha leído una línea completa
 				clean_line(line, '\n');
 				//line[total_read + last_read - 1] = '\0';
-				
-        	}
-		
-			total_read = 0; // REINICIAMOS PAA LA SIGUIENTE LINEA, POR QUE LA HEMOS LEIDO ENTERA (ESTO SERIA OTRO)
-			
 
-			if (total_read + last_read > 0) { // COMPROBAMOS QUE HAYA LEÍDO ALGO
-				proccess_line(cmds, line);					
 			}
-            
-        } else {
-            // SI EL ULTIMO CARACTER NO ES \n SIGNIFICA QUE NO HEMOS LEIDO LA LINEA ENTERA
-			total_read += last_read; // ACTUALIZAMOS total_read CON LO QUE HEMOS LEIDO EN LA ULTIMA LLA,ADA
-			total_size += LINE_BUFFER_SIZE; // SUMAMOS OTROS 256 CARACTERES
-			line = realloc(line, total_size); // Hacemos un realloc con el nuevo tamaño, y continuaremos leyendo desde line + current_size
+
+			total_read = 0;	// REINICIAMOS PAA LA SIGUIENTE LINEA, POR QUE LA HEMOS LEIDO ENTERA (ESTO SERIA OTRO)
+
+			if (total_read + last_read > 0) {	// COMPROBAMOS QUE HAYA LEÍDO ALGO
+				proccess_line(cmds, line);
+			}
+
+		} else {
+			// SI EL ULTIMO CARACTER NO ES \n SIGNIFICA QUE NO HEMOS LEIDO LA LINEA ENTERA
+			total_read += last_read;	// ACTUALIZAMOS total_read CON LO QUE HEMOS LEIDO EN LA ULTIMA LLA,ADA
+			total_size += LINE_BUFFER_SIZE;	// SUMAMOS OTROS 256 CARACTERES
+			line = realloc(line, total_size);	// Hacemos un realloc con el nuevo tamaño, y continuaremos leyendo desde line + current_size
 			malloc_check(line);
-        }
+		}
 
-    }
+	}
 
-    if (!feof(stdin)) {
-        // Error al leer
-        errx(EXIT_FAILURE, "error reading input");
-    }
+	if (!feof(stdin)) {
+		// Error al leer
+		errx(EXIT_FAILURE, "error reading input");
+	}
 
-    free(line);
+	free(line);
 }
 
 // ----------------------- FIN DE FUNCIONES DEDICADAS A LA LECTURA DE LA ENTRADA ---------------------------------------------------------------------

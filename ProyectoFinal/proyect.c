@@ -130,6 +130,18 @@ pipe_malloc_check(int *pipe)
 
 // ---------------------- FIN DE GESTIÓN DE ERRORES DEL PROGRAMA------------------------------------------------------------------------------
 
+// ------------------------ INICIALIZACION DE VAR DE ENTORNO result -------------------------------------------------------------------
+
+void
+initialize_result()
+{
+	setenv("result", "0", 1);
+}
+
+
+
+// --------------------------------------------------------------------------------------------------------------------------------------------
+
 // ----------------------------- GESTION DEL STRUCT COMMAND ----------------------------------------------------------------------
 
 void
@@ -1548,7 +1560,7 @@ read_lines(Commands *cmds)
 		// leera como maximo LINE_BUFFER_SIZE
 		// lo leera de stdin
 
-		size_t last_read = strlen(line + total_read);	// ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION
+		size_t last_read = strlen(line + total_read);	// ESTA VARIABLE NOS DICE, CUANTO TEXTO HEMOS LEIDO EN LA ULTIMA INTERVENCION Y LE QUITAMOS 1 DEL \n
 
 		//total_read = total_read + last_read;
 
@@ -1559,10 +1571,11 @@ read_lines(Commands *cmds)
 				//line[total_read + last_read - 1] = '\0';
 
 			}
-
+			//printf("Leido total: %d \n", total_read);
+			//printf("Ultima lectura: %d \n", strlen(line));
 			total_read = 0;	// REINICIAMOS PAA LA SIGUIENTE LINEA, POR QUE LA HEMOS LEIDO ENTERA (ESTO SERIA OTRO)
 
-			if (total_read + last_read > 0) {	// COMPROBAMOS QUE HAYA LEÍDO ALGO
+			if (total_read + last_read > 1) {	// COMPROBAMOS QUE HAYA LEÍDO ALGO, (DEBE SER > 1, PORQUE last_read, tiene \n aunque no se lea nada)
 				proccess_line(cmds, line);
 			}
 
@@ -1589,6 +1602,8 @@ read_lines(Commands *cmds)
 int
 main(int argc, char *argv[])
 {
+
+	initialize_result();
 
 	Commands Comandos;
 

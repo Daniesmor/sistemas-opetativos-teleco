@@ -125,6 +125,21 @@ pipe_malloc_check(int *pipe)
 
 }
 
+int
+open_check(int fd) 
+{
+	int opened=0;
+
+	if (fd < 0) {
+		printf("The file doesn't exist. \n");
+		opened = 1;
+	}
+
+	return opened;
+}
+
+
+
 // ---------------------- FIN DE GESTIÓN DE ERRORES DEL PROGRAMA------------------------------------------------------------------------------
 
 // ------------------------ INICIALIZACION DE VAR DE ENTORNO result -------------------------------------------------------------------
@@ -998,7 +1013,16 @@ fd_setter(Command *cmd, int *fd_in, int *fd_out)	// ESTA FUNCION REALIZA LAS RED
 	if (cmd->entrada != NULL) {
 		//printf("Se ha cambiado la entrada \n");
 		*fd_in = open(cmd->entrada, O_RDONLY);
-		dup2(*fd_in, STDIN_FILENO);
+		//printf("valor de fd: %d \n", *fd_in);
+		if (open_check(*fd_in) == 0) {
+			dup2(*fd_in, STDIN_FILENO);
+		} else {
+			//printf("hemos llegao\n");
+			free(cmd->entrada);
+			cmd->entrada = NULL;
+			//printf("valor de entrada: %s \n", cmd->entrada);
+			//*fd_in = -1;
+		}
 	} else {
 		*fd_in = STDIN_FILENO;
 	}
@@ -1006,7 +1030,16 @@ fd_setter(Command *cmd, int *fd_in, int *fd_out)	// ESTA FUNCION REALIZA LAS RED
 	if (cmd->salida != NULL) {
 		//printf("Se ha cambiado la salida \n");
 		*fd_out = open(cmd->salida, O_CREAT | O_WRONLY | O_TRUNC, 0666);
-		dup2(*fd_out, STDOUT_FILENO);
+		if (open_check(*fd_out) == 0) {
+			dup2(*fd_out, STDOUT_FILENO);
+		} else {
+			//printf("hemos llegao\n");
+			free(cmd->salida);
+			cmd->salida = NULL;
+			//printf("valor de entrada: %s \n", cmd->entrada);
+			//*fd_in = -1;
+		}
+		
 	} else {
 		*fd_out = STDOUT_FILENO;
 	}
@@ -1233,15 +1266,19 @@ exec_cmd(Command *cmd, int background)
 
 			fd_setter(cmd, &fd_in, &fd_out);
 			//printf("estoy leyendo de %d \n", fd_in);
+			//printf("estoy saliendo de %d \n", fd_out);
 
-			// ......................... EN CASO DE HERE{} ................................................
+			// ......................... EN CASO DE HERE{} ....................................................
 
 			close_here_child_pipes(cmd, pipe_here, STDIN_FILENO);
 			// .................................................................................................
 
-			execv(cmd->path, cmd->argumentos);
+			if (fd_in >= 0 && fd_out >= 0) {
+				execv(cmd->path, cmd->argumentos);
+			}
+			
 
-			exit(0);
+			exit(1);
 		default:
 			// ......................... EN CASO DE HERE{} ................................................
 			close_here_father_pipes(cmd, pipe_here);
@@ -1256,7 +1293,7 @@ exec_cmd(Command *cmd, int background)
 	} else {
 		setenv("result", "1", 1);
 	}
-
+	
 }
 
 // ------------------------ FIN DE EJECUCION DE PIPES Y COMANDOS INDIVIDUALES ---------------------------------------------------------------------
@@ -1536,6 +1573,7 @@ proccess_line(Commands *cmds, char *line)
 		search_paths(cmds);
 		//commands_printer(cmds);
 		exec_cmds(cmds);
+		//commands_printer(cmds);
 	}
 }
 

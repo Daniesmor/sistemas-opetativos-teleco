@@ -9,6 +9,8 @@
 #include <signal.h>
 #include <glob.h>
 
+// VFINAL 1.0
+
 /*
 
 gcc -Wall -Wshadow -Wvla -g -c proyect.c

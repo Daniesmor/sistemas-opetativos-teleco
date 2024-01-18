@@ -34,7 +34,6 @@ const char *builtin_cmds[] = {
 	"=",
 	"ifok",
 	"ifnot",
-	"$",
 };
 
 // ----------------------- FIN DE PARAMETROS Y CONSTANTES ---------------------------------------------------------------------------------------------
@@ -90,7 +89,6 @@ memLocateFailed()
 	    "Error: Could not allocate memory for the argument.\n");
 }
 
-
 int
 malloc_check(char *line)
 {
@@ -100,7 +98,6 @@ malloc_check(char *line)
 	}
 	return 0;
 }
-
 
 int
 cmd_malloc_check(Command *cmd)
@@ -113,10 +110,10 @@ cmd_malloc_check(Command *cmd)
 }
 
 void
-write_failed() {
+write_failed()
+{
 	err(EXIT_FAILURE, "Error: Write failed. \n");
 }
-
 
 void
 pipe_malloc_check(int *pipe)
@@ -137,8 +134,6 @@ initialize_result()
 {
 	setenv("result", "0", 1);
 }
-
-
 
 // --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -297,13 +292,13 @@ add_asignation_arg(char *vars, Commands *cmds)
 		// Manejar el error de asignación de memoria
 		memLocateFailed();
 	}
-
 	// GUARDAMOS EL VALOR DE LA VARIABLE QUE QUEREMOS CREAR COMO ARGUMENTO 0
 	cmds->comandos[cmds->numCommands]->
 	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] =
 	    strdup(vars);
 	malloc_check(cmds->comandos[cmds->numCommands]->
-	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos]);
+		     argumentos[cmds->comandos
+				[cmds->numCommands]->numArgumentos]);
 	cmds->comandos[cmds->numCommands]->numArgumentos++;
 
 }
@@ -322,8 +317,7 @@ variable_asig(Commands *cmds, char *token)	// VAMOS A INTERPRETAR ESTE COMANDO C
 	vars = strtok_r(NULL, " ", &saveptr);	//vars es una dir de memoria
 	if (vars != NULL) {
 		add_asignation_arg(vars, cmds);
-	} 
-	
+	}
 
 }
 
@@ -346,7 +340,8 @@ sust_cmd(Commands *cmds, char *token)	// VAMOS A INTERPRETAR ESTE COMANDO COMO U
 	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos] =
 	    strdup(vars);
 	malloc_check(cmds->comandos[cmds->numCommands]->
-	    argumentos[cmds->comandos[cmds->numCommands]->numArgumentos]);
+		     argumentos[cmds->comandos
+				[cmds->numCommands]->numArgumentos]);
 	cmds->comandos[cmds->numCommands]->numArgumentos++;
 
 }
@@ -405,7 +400,6 @@ remake_token(char **new_token, char *variable, char *original_token_copy)
 	}
 
 }
-
 
 void
 sust_vars(char **token, char **new_token)
@@ -543,7 +537,7 @@ close_here_father_pipes(Command *cmd, int pipe_here[2])
 		// Escribir la cadena en el extremo de escritura del pipe
 		if (write(pipe_here[1], cmd->here, strlen(cmd->here)) == -1) {
 			write_failed();
-		}	// ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
+		}		// ESCRIBIMOS POR EL PIPE, LA CADENA QUE CONTIENE DE HERE{}
 		close(pipe_here[1]);	// UNA VEZ ESCRITA LA CADENA LA PODEMOS CERRAR
 	}
 }
@@ -694,9 +688,10 @@ envar_detector(Commands *cmds, char **token, char *saveptr)
 
 	if (strchr(*token, '$') != NULL) {
 
-		if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
-			sust_cmd(cmds, *token);
-		}
+		/*
+		   if (cmds->comandos[cmds->numCommands]->nombre == NULL) {
+		   sust_cmd(cmds, *token);
+		   } */
 		sust_vars(*&token, &new_token);
 		//printf("EL nuevo token es: %s \n", new_token);
 		instruction_classifier(cmds, &new_token, &saveptr);
@@ -832,9 +827,11 @@ formatter(char *line, Commands *cmds)
 	int longitud = strlen(line);
 
 	char *linenotabs = (char *)malloc((2 * longitud + 1) * sizeof(char));
+
 	malloc_check(linenotabs);
 
 	char *nuevoString = (char *)malloc((2 * longitud + 1) * sizeof(char));
+
 	malloc_check(nuevoString);
 
 	remove_tabs(line, linenotabs);	// ESTA FUNCION QUITA LAS TABULACIONES Y LE DA FORMATO DE ESPACIOS
@@ -893,9 +890,11 @@ searchin_paths(Command *cmd)
 	//printf("-----> Buscamos en $PATHS \n");
 
 	char *sh_paths = getenv("PATH");	//ESTO NOS DEVUELVE LA LISTA DE LA VAR. PATHS DE LA SHELL, SEPARADOS POR ":", POR LO QUE HAY QUE TOKENIZARLA
+
 	// PATH ES UNA VARIABLE QUE ESTÁ ENTODOS LOS SIST LINUX POR LO QUE NO HACE FALTA COMPROBAR SI EXISTIRÁ
 
 	char *sh_paths_copy = strdup(sh_paths);
+
 	malloc_check(sh_paths_copy);
 
 	char *token;
@@ -1072,6 +1071,7 @@ execute_pipe(Commands *cmds)
 	int child;
 
 	int **pipes = malloc((cmds->numCommands - 1) * sizeof(int *));
+
 	// COMPROBRAMES QUE FUNCIONA AHORA
 
 	for (int pipe = 0; pipe < cmds->numCommands - 1; pipe++) {
@@ -1534,6 +1534,7 @@ proccess_line(Commands *cmds, char *line)
 
 	if (cmds->numCommands > 0) {
 		search_paths(cmds);
+		//commands_printer(cmds);
 		exec_cmds(cmds);
 	}
 }

@@ -1,0 +1,11 @@
+ls
+ifok ls ls -l
+ifnot ls
+ifok ls /noexist
+ifnot ls
+ls *.txt
+rm *tput.txt
+ls
+echo "Hola" | cat > output.txt < input.txt
+sleep 5 &
+ls

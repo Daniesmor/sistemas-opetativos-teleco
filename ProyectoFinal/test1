@@ -1,0 +1,17 @@
+ls -l
+pwd
+echo "Hola MUndo" > output.txt
+cat output.txt
+cat < input.txt
+ls | grep txt | wc -l
+cd /tmpa
+cd /tmp 
+ls
+cd
+ls
+x=5
+echo $x
+$x
+echo $x asdasda
+echo $x 	asdas
+echo $x/asdasdk

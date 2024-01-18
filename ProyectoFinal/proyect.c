@@ -126,9 +126,9 @@ pipe_malloc_check(int *pipe)
 }
 
 int
-open_check(int fd) 
+open_check(int fd)
 {
-	int opened=0;
+	int opened = 0;
 
 	if (fd < 0) {
 		printf("The file doesn't exist. \n");
@@ -137,8 +137,6 @@ open_check(int fd)
 
 	return opened;
 }
-
-
 
 // ---------------------- FIN DE GESTIÓN DE ERRORES DEL PROGRAMA------------------------------------------------------------------------------
 
@@ -1039,7 +1037,7 @@ fd_setter(Command *cmd, int *fd_in, int *fd_out)	// ESTA FUNCION REALIZA LAS RED
 			//printf("valor de entrada: %s \n", cmd->entrada);
 			//*fd_in = -1;
 		}
-		
+
 	} else {
 		*fd_out = STDOUT_FILENO;
 	}
@@ -1276,7 +1274,6 @@ exec_cmd(Command *cmd, int background)
 			if (fd_in >= 0 && fd_out >= 0) {
 				execv(cmd->path, cmd->argumentos);
 			}
-			
 
 			exit(1);
 		default:
@@ -1293,7 +1290,7 @@ exec_cmd(Command *cmd, int background)
 	} else {
 		setenv("result", "1", 1);
 	}
-	
+
 }
 
 // ------------------------ FIN DE EJECUCION DE PIPES Y COMANDOS INDIVIDUALES ---------------------------------------------------------------------

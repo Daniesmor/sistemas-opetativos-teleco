@@ -14,9 +14,15 @@ types(){
 	fgrep typedef $1 | fgrep struct | sed -E 's/.*[ \t]([a-zA-Z_]+) *[;}].*/\1/g'| sort -u
 }
 
+typesall() {
+	for i in "$@"; do
+		types "$i"
+	done
+}
+
 for i in "$@"; do
 	BADTYPEDEF=false
-	ts=`types $i`
+	ts=`typesall "$@"`
 	if echo $ts|egrep 'struct|{' > /dev/null 2>&1 ; then
 		echo Warning: separate typedef from type definition 1>&2
 		egrep -n 'typedef.*struct' $i /dev/null  |sed -E 's/^/\t/' 2>&1
@@ -40,12 +46,12 @@ for i in "$@"; do
 	fi
 	if [ $BADTYPEDEF = false ]; then
 		#indent twice to undo trashy formatting
-		indent "$i"> /dev/null 2>&1
-		indent $tparam -par -hnl -nsc -bl -ts8 -i8 -ut -bad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  -cli0 -d0 -di1 -nfc1 -ip0 -l80 -lp -npcs -nprs -psl -sai -saf -saw -ncs -sob -nfca -cp33 -ss -il1 "$i"
+		indent -par -hnl -nsc -bl -ts8 -i8 -ut -bad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  -cli0 -d0 -di1 -nfc1 -ip0 -l80 -lp -npcs -nprs -psl -sai -saf -saw -ncs -sob -nfca -cp33 -ss -il1 -cdw "$i"> /dev/null 2>&1
+		indent $tparam -par -hnl -nsc -bl -ts8 -i8 -ut -bad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  -cli0 -d0 -di1 -nfc1 -ip0 -l80 -lp -npcs -nprs -psl -sai -saf -saw -ncs -sob -nfca -cp33 -ss -il1 -cdw "$i"
 	else
 		#indent twice to undo trashy formatting
-		indent "$i"> /dev/null 2>&1
-		indent -par -hnl -nsc -bl -ts8 -i8 -ut -bad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  -cli0 -d0 -di1 -nfc1 -ip0 -l80 -lp -npcs -nprs -psl -sai -saf -saw -ncs -sob -nfca -cp33 -ss -il1 "$i"
+		indent -par -hnl -nsc -bl -ts8 -i8 -ut -bad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  -cli0 -d0 -di1 -nfc1 -ip0 -l80 -lp -npcs -nprs -psl -sai -saf -saw -ncs -sob -nfca -cp33 -ss -il1 -cdw "$i"> /dev/null 2>&1
+		indent -par -hnl -nsc -bl -ts8 -i8 -ut -bad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  -cli0 -d0 -di1 -nfc1 -ip0 -l80 -lp -npcs -nprs -psl -sai -saf -saw -ncs -sob -nfca -cp33 -ss -il1 -cdw "$i"
 	fi
 	rm -f "$i"~
 done

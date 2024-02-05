@@ -11,5 +11,6 @@
         "string.h": "c",
         "err.h": "c",
         "purgatorio": "c"
-    }
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }

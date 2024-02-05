@@ -1,0 +1,54 @@
+ls -l
+pwd
+echo "Hola MUndo" > output.txt
+cat output.txt
+cat < input.txt
+ls | grep txt | wc -l
+cd /tmpa
+cd /tmp 
+ls
+cd
+ls
+x=5
+echo $x
+$x
+echo $x asdasda
+echo $x 	asdas
+echo $x/asdasdk
+
+
+ls
+ifok ls ls -l
+ifnot ls
+ifok ls /noexist
+ifnot ls
+ls *.txt
+rm *tput.txt
+ls
+echo "Hola" | cat > output.txt < input.txt
+sleep 5 &
+ls
+
+
+cat | wc -l HERE{
+asd
+asdasdasdasdasda
+asdasdaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+asdas
+asdasdasd
+}
+
+
+date +%N
+ls	|       grep	txt	|	wc	-l
+ls 	|   	grep txt		| wc -l
+echo "Hello" > 		output.txt
+cat output.txt
+cat < 		input.txt
+echo hula | grep u | wc -l
+cat | grep u | wc -l HERE{
+asdu
+asd
+}
+/usr/bin/date +%N
+

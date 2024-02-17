@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "unistd.h": "c",
+        "time.h": "c",
+        "wait.h": "c",
+        "types.h": "c",
+        "stdlib.h": "c",
+        "stdio.h": "c",
+        "temp": "c",
+        "old": "c",
+        "string.h": "c",
+        "err.h": "c",
+        "purgatorio": "c"
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
+}

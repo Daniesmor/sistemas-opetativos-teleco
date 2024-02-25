@@ -1185,6 +1185,16 @@ check_all_paths(Commands *cmds)
 }
 
 void
+exec_single(Command *cmd, int is_background)
+{
+    if (is_builtin(cmd) == 1) {
+        exec_builtin(cmd);
+    } else {
+        exec_cmd(cmd, is_background);
+    }
+}
+
+void
 exec_cmds(Commands *cmds)
 {
 	if (cmds->numCommands > 1) {
@@ -1192,13 +1202,9 @@ exec_cmds(Commands *cmds)
 			execute_pipe(cmds);
 		}
 	} else {
-		Command *cmd_name = cmds->commands[0];
-		int is_background = cmds->background;
-		if (is_builtin(cmd_name) == 1) {
-			exec_builtin(cmd_name);
-		} else {
-			exec_cmd(cmd_name, is_background);
-		}
+        Command *cmd= cmds->commands[0];
+        int is_background = cmds->background;
+        exec_single(cmd, is_background);
 	}
 
 }
